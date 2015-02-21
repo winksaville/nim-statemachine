@@ -1,4 +1,17 @@
 import times
+import parseopt2
+import os
+import strutils
+
+when defined(fast):
+  const fastest=true
+else:
+  const fastest=false
+
+when defined(release):
+  const debug = false
+else:
+  const debug = true
 
 type
   Message = ref object of RootObj
@@ -39,18 +52,40 @@ when isMainModule:
       sm.transitionTo(1)
     else: echo "TestSm default state"
 
+  var
+    loops: int
+
+  # command line args
+  when debug: echo "paramCount=" & $paramCount() & " paramStr=" & $commandLineParams()
+
+  when defined(fast):
+    loops = 1_000_000_000
+  else:
+    loops =   100_000_000
+
+  for kind, key, val in getopt():
+    when debug: echo "kind=" & $kind & " key=" & key & " val=" & val
+    case kind:
+    of cmdShortOption:
+      case toLower(key):
+      of "l": loops = parseInt(val)
+      else: discard
+    else: discard
+
   testSm1 = TestSm(curState: 1)
   msg = Message()
 
   var startTime = cpuTime()
-  var loops: int32 = 1_000_000_000
-  for cmd in 1i32 .. loops: # better way to make a range of i32 literals?
-    when false:
-      msg = Message(cmd: cmd) # 5,100ns/loop, 3000 time slower
+  var cmdVal = 1i32
+  echo "loops=" & $loops & " fastest=" & $fastest
+  for loop in 1..loops:
+    cmdVal += 1
+    when fastest:
+      msg.cmd = cmdVal # 2.4332ns/loop
     else:
-      msg.cmd = cmd # 1.7ns/loop
-    msg.cmd = cmd
+      msg = Message(cmd: cmdVal) # 26.5191ns/loop about 10 times slower
     testSm1.sendMsg(msg)
   var endTime = cpuTime()
 
-  echo("time=" & $((endTime - startTime)/float(loops)) & " testSm1=" & $testSm1[])
+  var time = (((endTime - startTime) / float(loops))) * 1_000_000_000
+  echo("time=" & time.formatFloat(ffDecimal, 4) & "ns/loop" & " testSm1=" & $testSm1[])
