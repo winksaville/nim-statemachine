@@ -75,17 +75,17 @@ when isMainModule:
   testSm1 = TestSm(curState: 1)
   msg = Message()
 
-  var startTime = cpuTime()
+  var startTime = epochTime()
   var cmdVal = 1i32
   echo "loops=" & $loops & " fastest=" & $fastest
   for loop in 1..loops:
     cmdVal += 1
     when fastest:
-      msg.cmd = cmdVal # 2.4332ns/loop
+      msg.cmd = cmdVal # 2.3ns/loop
     else:
-      msg = Message(cmd: cmdVal) # 26.5191ns/loop about 10 times slower
+      msg = Message(cmd: cmdVal) # 26.6ns/loop about 10 times slower
     testSm1.sendMsg(msg)
-  var endTime = cpuTime()
+  var endTime = epochTime()
 
   var time = (((endTime - startTime) / float(loops))) * 1_000_000_000
   echo("time=" & time.formatFloat(ffDecimal, 4) & "ns/loop" & " testSm1=" & $testSm1[])
