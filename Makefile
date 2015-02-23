@@ -24,11 +24,15 @@ else
 endif
 
 SRC_DIR=src
-NIM_TARGET=$(SRC_DIR)/statemachine
+NIM_SRC_TARGET=$(SRC_DIR)/statemachine
+NIM_BIN_TARGET=$(SRC_DIR)/bin/statemachine
 
 TEST_DIR=tests
-TEST_SRC=test1
-NIM_TEST_TARGET=$(TEST_DIR)/bin/test1
+NIM_SRC_TEST_TARGET=$(TEST_DIR)/test1
+NIM_BIN_TEST_TARGET=$(TEST_DIR)/bin/test1
+
+NIM_SRC_UNITTEST_TARGET=$(TEST_DIR)/statemachine_unittests
+NIM_BIN_UNITTEST_TARGET=$(TEST_DIR)/bin/statemachine_unittests
 
 #NIM_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE)
 NIM_FLAGS= $(FAST_DEFINE) $(REL_DEFINE)
@@ -38,35 +42,49 @@ NIM_TEST_FLAGS= $(FAST_DEFINE) $(REL_DEFINE)
 help:
 	@echo "Usage:"
 	@echo " targets:"
-	@echo "   build  -- clean and build statemachine"
-	@echo "   tests  -- clean build and run the tests"
-	@echo "   run    -- run statemachine no parameters"
-	@echo "   clean  -- remove build artifacts"
+	@echo "   build      -- clean and build statemachine"
+	@echo "   tests      -- clean build and run the tests"
+	@echo "   unittests  -- clean build and run the tests"
+	@echo "   run        -- run statemachine no parameters"
+	@echo "   clean      -- remove build artifacts"
 	@echo " options:"
 	@echo "   loops=count                     -- optional number of loops for run"
 	@echo "   rel={true|false} default false  -- release build"
 	@echo "   fast={true|false} default false -- fastest running"
 
-build: clean $(NIM_TARGET)
+build: clean $(NIM_BIN_TARGET)
 
-tests: clean-tests $(NIM_TEST_TARGET) run-tests
+tests: clean-tests $(NIM_BIN_TEST_TARGET) run-tests
 
-$(NIM_TARGET): $(NIM_TARGET).nim
-	nim c $(NIM_FLAGS) $(NIM_TARGET).nim
+unittests: clean-tests $(NIM_BIN_UNITTEST_TARGET) run-unittests
 
-run: $(NIM_TARGET)
-	./$(NIM_TARGET) $(LOOPS)
+$(NIM_BIN_TARGET): $(NIM_SRC_TARGET).nim
+	@mkdir -p $(SRC_DIR)/bin
+	nim c $(NIM_FLAGS) $<
+
+run: $(NIM_BIN_TARGET)
+	./$(NIM_BIN_TARGET) $(LOOPS)
 
 # We need to makedir here because its not automatically created and linking fails
-$(NIM_TEST_TARGET): $(TEST_DIR)/$(TEST_SRC).nim Makefile
+$(NIM_BIN_TEST_TARGET): $(NIM_SRC_TEST_TARGET).nim Makefile
 	@mkdir -p $(TEST_DIR)/bin
 	nim c $(NIM_TEST_FLAGS) $<
 
-run-tests: $(NIM_TEST_TARGET)
-	./$(NIM_TEST_TARGET) $(LOOPS)
+run-tests: $(NIM_BIN_TEST_TARGET)
+	./$(NIM_BIN_TEST_TARGET) $(LOOPS)
 
-clean: clean-tests
-	@rm -rf $(SRC_DIR)/nimcache $(NIM_TARGET)
+# Unit tests
+$(NIM_BIN_UNITTEST_TARGET): $(NIM_SRC_UNITTEST_TARGET).nim Makefile
+	@mkdir -p $(TEST_DIR)/bin
+	nim c $(NIM_TEST_FLAGS) $<
 
-clean-tests:
+run-unittests: $(NIM_BIN_UNITTEST_TARGET)
+	./$(NIM_BIN_UNITTEST_TARGET) $(LOOPS)
+
+
+# Clean operations
+clean:
+	@rm -rf $(SRC_DIR)/nimcache $(SRC_DIR)/bin
+
+clean-tests: clean
 	@rm -rf $(TEST_DIR)/nimcache $(TEST_DIR)/bin
