@@ -13,8 +13,8 @@ else:
 
 type
   TestSm = ref object of StateMachine
-  counter1: int
-  counter2: int
+    counter1: int
+    counter2: int
 
 var
   testSm1: TestSm
