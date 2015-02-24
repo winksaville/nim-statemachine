@@ -19,7 +19,7 @@ type
 var
   testSm1: TestSm
 
-method processMsg(sm: TestSm, msg: Message) =
+method processMsg(sm: TestSm, msg: MessageRef) =
   case sm.curState
   of 1:
     sm.counter1 += 1
@@ -54,7 +54,7 @@ proc t1() =
   testSm1 = TestSm(curState: 1)
 
   var ma = newMessageArena()
-  var msg = Message()
+  var msg = MessageRef()
 
   var startTime = epochTime()
   var cmdVal = 1.int32
@@ -62,13 +62,22 @@ proc t1() =
   for loop in 1..loops:
     cmdVal += 1
     when fastest:
-      msg.cmd = cmdVal # 2.3ns/loop desktop, 22.9ns/loop on mac laptop
+      # Reuse same message this is the fastest path
+      # 19.2ns/loop desktop, 22.9ns/loop on mac laptop
+      msg.cmd = cmdVal
+      testSm1.sendMsg(msg)
+    elif false:
+      # Allocate a new MessageRef each time, this is the slowest path
+      # 100.2ns/loop desktop, 125.4ns/loop laptop
+      msg = MessageRef(cmd: cmdVal)
       testSm1.sendMsg(msg)
     else:
-      #msg = Message(cmd: cmdVal) # 26.6ns/loop desktop, 125.4ns/loop laptop
-      msg = ma.getMessage(cmdVal, 0) # 46.5ns/loop laptop
+      # Use MessageArena to speed things up
+      # 37.5ns/loop 46.5ns/loop laptop
+      msg = ma.getMessage(cmdVal, 0)
       testSm1.sendMsg(msg)
       ma.retMessage(msg)
+
   var
     endTime = epochTime()
     time = (((endTime - startTime) / float(loops))) * 1_000_000_000

@@ -7,15 +7,15 @@
 import statemachine
 
 type
-  MessagePtr* = ptr Message
-  MessageArenaPtr = ptr MessageArena
   MessageArena* = object
     msgCount*: int
     msgArray*: ptr array[256, MessagePtr]
 
+  MessageArenaPtr* = ptr MessageArena
+
 # private procs
-proc newMessage(cmdVal: int32, dataSize: int): Message =
-  result = cast[Message](alloc(sizeof(Message)))
+proc newMessage(cmdVal: int32, dataSize: int): MessagePtr =
+  result = cast[MessagePtr](alloc(sizeof(Message)))
   result.cmd = cmdVal
 
 proc getMsgArrayPtr(ma: MessageArenaPtr): ptr array[256, MessagePtr] =
@@ -31,7 +31,7 @@ proc `$`*(ma: MessageArenaPtr): string =
   if ma.msgArray != nil:
     for idx in 0..ma.msgCount-1:
       # probably should do a sequence ??
-      msgStr &= $(cast[Message](ma.msgArray[idx]))
+      msgStr &= $(cast[MessagePtr](ma.msgArray[idx]))
       if idx < ma.msgCount-1:
         msgStr &= ", "
   msgStr &= "}"
@@ -49,16 +49,16 @@ proc delMessageArena*(ma: MessageArenaPtr) =
     free(ma.msgArray)
   dealloc(ma)
 
-proc getMessage*(ma: MessageArenaPtr, cmd: int32, dataSize: int): Message =
+proc getMessage*(ma: MessageArenaPtr, cmd: int32, dataSize: int): MessageRef =
   var msgA = ma.getMsgArrayPtr()
   if ma.msgCount > 0:
     ma.msgCount -= 1
-    result = cast[Message](msgA[ma.msgCount])
+    result = cast[MessageRef](msgA[ma.msgCount])
     result.cmd = cmd
   else:
-    result = newMessage(cmd, dataSize)
+    result = cast[MessageRef](newMessage(cmd, dataSize))
 
-proc retMessage*(ma: MessageArenaPtr, msg: Message) =
+proc retMessage*(ma: MessageArenaPtr, msg: MessageRef) =
   var msgA = ma.getMsgArrayPtr()
   if ma.msgCount < msgA[].len():
     msgA[ma.msgCount] = cast[MessagePtr](msg)
