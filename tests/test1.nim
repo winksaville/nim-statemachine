@@ -18,7 +18,6 @@ type
 
 var
   testSm1: TestSm
-  msg: Message
 
 method processMsg(sm: TestSm, msg: Message) =
   case sm.curState
@@ -53,18 +52,23 @@ proc t1() =
     else: discard
 
   testSm1 = TestSm(curState: 1)
-  msg = Message()
+
+  var ma = newMessageArena()
+  var msg = Message()
 
   var startTime = epochTime()
-  var cmdVal = 1i32
+  var cmdVal = 1.int32
   echo "loops=" & $loops & " fastest=" & $fastest
   for loop in 1..loops:
     cmdVal += 1
     when fastest:
-      msg.cmd = cmdVal # 2.3ns/loop
+      msg.cmd = cmdVal # 2.3ns/loop desktop, 22.9ns/loop on mac laptop
+      testSm1.sendMsg(msg)
     else:
-      msg = Message(cmd: cmdVal) # 26.6ns/loop about 10 times slower
-    testSm1.sendMsg(msg)
+      #msg = Message(cmd: cmdVal) # 26.6ns/loop desktop, 125.4ns/loop laptop
+      msg = ma.getMessage(cmdVal, 0) # 46.5ns/loop laptop
+      testSm1.sendMsg(msg)
+      ma.retMessage(msg)
   var
     endTime = epochTime()
     time = (((endTime - startTime) / float(loops))) * 1_000_000_000
@@ -136,5 +140,5 @@ proc t2() =
 
   echo "t2:-"
 
-#t1()
+t1()
 t2()
