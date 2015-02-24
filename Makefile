@@ -23,6 +23,8 @@ else
   LOOPS=-l:$(loops)
 endif
 
+
+
 SRC_DIR=src
 NIM_SRC_TARGET=$(SRC_DIR)/statemachine
 NIM_BIN_TARGET=$(SRC_DIR)/bin/statemachine
@@ -37,7 +39,8 @@ NIM_BIN_UNITTEST_TARGET=$(TEST_DIR)/bin/statemachine_unittests
 #NIM_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE)
 NIM_FLAGS= $(FAST_DEFINE) $(REL_DEFINE)
 
-NIM_TEST_FLAGS= $(FAST_DEFINE) $(REL_DEFINE)
+#NIM_TEST_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE)
+NIM_TEST_FLAGS=$(FAST_DEFINE) $(REL_DEFINE)
 
 help:
 	@echo "Usage:"
@@ -52,17 +55,16 @@ help:
 	@echo "   rel={true|false} default false  -- release build"
 	@echo "   fast={true|false} default false -- fastest running"
 
-build: clean $(NIM_BIN_TARGET)
+build:
+	@mkdir -p $(SRC_DIR)/bin
+	nim c $(NIM_FLAGS) $(SRC_DIR)/messagearena.nim
+	nim c $(NIM_FLAGS) $(SRC_DIR)/statemachine.nim
 
 tests: clean-tests $(NIM_BIN_TEST_TARGET) run-tests
 
 unittests: clean-tests $(NIM_BIN_UNITTEST_TARGET) run-unittests
 
-$(NIM_BIN_TARGET): $(NIM_SRC_TARGET).nim
-	@mkdir -p $(SRC_DIR)/bin
-	nim c $(NIM_FLAGS) $<
-
-run: $(NIM_BIN_TARGET)
+run:
 	./$(NIM_BIN_TARGET) $(LOOPS)
 
 # We need to makedir here because its not automatically created and linking fails

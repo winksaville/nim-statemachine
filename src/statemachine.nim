@@ -7,6 +7,9 @@ type
   StateMachine* = ref object of RootObj
     curState*: int
 
+proc `$`*(msg: Message): string =
+  result = $msg.cmd
+
 # processMsg needs to be dynamically dispatched thus its a method
 method processMsg*(sm: StateMachine, msg: Message) =
   echo "StateMachine.processMsg msg=", msg[]
