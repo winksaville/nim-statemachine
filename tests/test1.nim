@@ -73,7 +73,7 @@ proc t1() =
       testSm1.sendMsg(msg)
     else:
       # Use MessageArena to speed things up
-      # 37.5ns/loop 46.5ns/loop laptop
+      # 37.5ns/loop desttop (no locks), 55.2ns/loop desttop (locks), 46.5ns/loop laptop (no locks)
       msg = ma.getMessage(cmdVal, 0)
       testSm1.sendMsg(msg)
       ma.retMessage(msg)

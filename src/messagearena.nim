@@ -1,15 +1,15 @@
 # A MessageArena that manages getting and returning messages from memory
-#
-#               ****** NOT THREAD SAFE! *********
-#
-# I don't like that sometimes I'm casting to "Ptr" and sometimes not.
-# Casting is bad but this seems out of control!
-import statemachine
+# The MessageArena is thread safe and shared so they maybe used across threads.
+import statemachine, locks
+
+const
+  msgArenaSize = 32
 
 type
   MessageArena* = object
-    msgCount*: int
-    msgArray*: ptr array[256, MessagePtr]
+    lock: TLock
+    msgCount: int
+    msgArray: ptr array[msgArenaSize, MessagePtr]
 
   MessageArenaPtr* = ptr MessageArena
 
@@ -18,50 +18,64 @@ proc newMessage(cmdVal: int32, dataSize: int): MessagePtr =
   result = cast[MessagePtr](alloc(sizeof(Message)))
   result.cmd = cmdVal
 
-proc getMsgArrayPtr(ma: MessageArenaPtr): ptr array[256, MessagePtr] =
+proc getMsgArrayPtr(ma: MessageArenaPtr): ptr array[msgArenaSize, MessagePtr] =
+  ### Assume ma.lock is acquired
   if ma.msgArray == nil:
-    ma.msgArray = cast[ptr array[256, MessagePtr]](create(MessagePtr, 256))
+    ma.msgArray = cast[ptr array[msgArenaSize, MessagePtr]](allocShared(sizeof(MessagePtr) * msgArenaSize))
   result = ma.msgArray
   
-
 ## public procs
 
 proc `$`*(ma: MessageArenaPtr): string =
-  var msgStr = "{"
-  if ma.msgArray != nil:
-    for idx in 0..ma.msgCount-1:
-      # probably should do a sequence ??
-      msgStr &= $(cast[MessagePtr](ma.msgArray[idx]))
-      if idx < ma.msgCount-1:
-        msgStr &= ", "
-  msgStr &= "}"
-  result = "{" & $ma.msgCount & ", " & msgStr & "}"
+  ma.lock.acquire()
+  block:
+    var msgStr = "{"
+    if ma.msgArray != nil:
+      for idx in 0..ma.msgCount-1:
+        # probably should do a sequence ??
+        msgStr &= $(cast[MessagePtr](ma.msgArray[idx]))
+        if idx < ma.msgCount-1:
+          msgStr &= ", "
+    msgStr &= "}"
+    result = "{" & $ma.msgCount & ", " & msgStr & "}"
+  ma.lock.release()
 
 proc newMessageArena*(): MessageArenaPtr =
-  result = cast[MessageArenaPtr](alloc0(sizeof(MessageArena)))
+  result = cast[MessageArenaPtr](allocShared0(sizeof(MessageArena)))
+  result.lock.initLock()
   result.msgCount = 0;
 
 proc delMessageArena*(ma: MessageArenaPtr) =
-  if ma.msgArray != nil:
-    for idx in 0..ma.msgCount-1:
-      var msg = cast[MessagePtr](ma.msgArray[idx])
-      dealloc(msg)
-    free(ma.msgArray)
-  dealloc(ma)
+  ma.lock.acquire()
+  block:
+    if ma.msgArray != nil:
+      for idx in 0..ma.msgCount-1:
+        var msg = cast[MessagePtr](ma.msgArray[idx])
+        deallocShared(msg)
+      deallocShared(ma.msgArray)
+  ma.lock.release()
+  ma.lock.deinitLock()
+  deallocShared(ma)
 
 proc getMessage*(ma: MessageArenaPtr, cmd: int32, dataSize: int): MessageRef =
-  var msgA = ma.getMsgArrayPtr()
-  if ma.msgCount > 0:
-    ma.msgCount -= 1
-    result = cast[MessageRef](msgA[ma.msgCount])
-    result.cmd = cmd
-  else:
-    result = cast[MessageRef](newMessage(cmd, dataSize))
+  ma.lock.acquire()
+  block:
+    var msgA = ma.getMsgArrayPtr()
+    if ma.msgCount > 0:
+      ma.msgCount -= 1
+      result = cast[MessageRef](msgA[ma.msgCount])
+      result.cmd = cmd
+    else:
+      result = cast[MessageRef](newMessage(cmd, dataSize))
+  ma.lock.release()
 
 proc retMessage*(ma: MessageArenaPtr, msg: MessageRef) =
-  var msgA = ma.getMsgArrayPtr()
-  if ma.msgCount < msgA[].len():
-    msgA[ma.msgCount] = cast[MessagePtr](msg)
-    ma.msgCount += 1
-  else:
-    doAssert(ma.msgCount < msgA[].len())
+  ma.lock.acquire()
+  block:
+    var msgA = ma.getMsgArrayPtr()
+    if ma.msgCount < msgA[].len():
+      msgA[ma.msgCount] = cast[MessagePtr](msg)
+      ma.msgCount += 1
+    else:
+      doAssert(ma.msgCount < msgA[].len())
+  ma.lock.release()
