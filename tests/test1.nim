@@ -1,4 +1,4 @@
-import times, parseopt2, os, strutils
+import times, parseopt2, os, strutils, threadpool, math
 import statemachine, messagearena
 
 when defined(fast):
@@ -15,9 +15,6 @@ type
   TestSm = ref object of StateMachine
     counter1: int
     counter2: int
-
-var
-  testSm1: TestSm
 
 method processMsg(sm: TestSm, msg: MessageRef) =
   case sm.curState
@@ -36,22 +33,22 @@ var
 # command line args
 when debug: echo "paramCount=" & $paramCount() & " paramStr=" & $commandLineParams()
 
-proc t1() =
-  when defined(fast):
-    loops = 1_000_000_000
-  else:
-    loops =   100_000_000
+when defined(fast):
+  loops = 1_000_000_000
+else:
+  loops =   100_000_000
 
-  for kind, key, val in getopt():
-    when debug: echo "kind=" & $kind & " key=" & key & " val=" & val
-    case kind:
-    of cmdShortOption:
-      case toLower(key):
-      of "l": loops = parseInt(val)
-      else: discard
+for kind, key, val in getopt():
+  when debug: echo "kind=" & $kind & " key=" & key & " val=" & val
+  case kind:
+  of cmdShortOption:
+    case toLower(key):
+    of "l": loops = parseInt(val)
     else: discard
+  else: discard
 
-  testSm1 = TestSm(curState: 1)
+proc t1() =
+  var testSm1 = TestSm(curState: 1)
 
   var ma = newMessageArena()
   var msg = MessageRef()
@@ -149,5 +146,26 @@ proc t2() =
 
   echo "t2:-"
 
-t1()
-t2()
+proc t3() =
+  # shared message arena
+  var ma = newMessageArena()
+  var loopCount = 10.int32
+  var threadCount = 5
+
+  randomize()
+
+  proc t(name: string) =
+    for idx in 0..loopCount-1:
+      var delay = 0 # random(100..250)
+      echo "t" & name & " idx=" & $idx & " delay=" & $delay
+      var msg = ma.getMessage(idx, 0)
+      sleep(delay)
+      ma.retMessage(msg)
+
+  for tc in 1..threadCount:
+    spawn t("t" & $tc)
+  sync()
+
+#t1()
+#t2()
+t3()
