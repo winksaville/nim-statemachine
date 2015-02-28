@@ -57,19 +57,19 @@ proc delMessageArena*(ma: MessageArenaPtr) =
   ma.lock.deinitLock()
   deallocShared(ma)
 
-proc getMessage*(ma: MessageArenaPtr, cmd: int32, dataSize: int): MessageRef =
+proc getMessage*(ma: MessageArenaPtr, cmd: int32, dataSize: int): MessagePtr =
   ma.lock.acquire()
   block:
     var msgA = ma.getMsgArrayPtr()
     if ma.msgCount > 0:
       ma.msgCount -= 1
-      result = cast[MessageRef](msgA[ma.msgCount])
+      result = cast[MessagePtr](msgA[ma.msgCount])
       result.cmd = cmd
     else:
-      result = cast[MessageRef](newMessage(cmd, dataSize))
+      result = cast[MessagePtr](newMessage(cmd, dataSize))
   ma.lock.release()
 
-proc retMessage*(ma: MessageArenaPtr, msg: MessageRef) =
+proc retMessage*(ma: MessageArenaPtr, msg: MessagePtr) =
   ma.lock.acquire()
   block:
     var msgA = ma.getMsgArrayPtr()

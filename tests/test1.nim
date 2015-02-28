@@ -146,26 +146,71 @@ proc t2() =
 
   echo "t2:-"
 
+type
+  TSm = ref object of StateMachine
+    counter1: int
+    counter2: int
+    d: TSm
+
+proc `$`(sm: TSm): string =
+  result = "(counter1x=" & $(sm.counter1) & " counter2x=" & $(sm.counter2) & ")"
+
+method processMsg(sm: TSm, msg: MessageRef) =
+  case sm.curState
+  of 1:
+    sm.counter1 += 1
+    sm.transitionTo(2)
+  of 2:
+    sm.counter2 += 1
+    sm.transitionTo(1)
+  else:
+    echo "TestSm default state"
+  if (sm.cmdVal <= loops):
+    mm = ma.getMessage(msg.cmdVal + 1, 0)
+    sm.d.sendMsg(mm)
+  ma.retMessage(msg)
+
 proc t3() =
-  # shared message arena
+  var tSm1 = TSm(curState: 1)
+  var tSm2 = TSm(curState: 1)
   var ma = newMessageArena()
+
+  tSm1.d = tSm2;
+  tSm2.d = tSm1;
+
+  echo "tSm1=" & $tSm1
+
   var loopCount = 10.int32
-  var threadCount = 5
 
   randomize()
 
-  proc t(name: string) =
-    for idx in 0..loopCount-1:
-      var delay = 0 # random(100..250)
-      echo "t" & name & " idx=" & $idx & " delay=" & $delay
-      var msg = ma.getMessage(idx, 0)
-      sleep(delay)
-      ma.retMessage(msg)
+  proc th(name: string) =
+    var msg: MessageRef
+    var startTime = epochTime()
+    var cmdVal = 0.int32
 
-  for tc in 1..threadCount:
-    spawn t("t" & $tc)
+    echo "loops=" & $loops & " fastest=" & $fastest
+    echo "cmdVal=" & $cmdVal
+    msg = ma.getMessage(cmdVal, 0)
+    tSm1.sendMsg(msg)
+
+    var
+      endTime = epochTime()
+      time = (((endTime - startTime) / float(loops))) * 1_000_000_000
+
+    echo("time=" & time.formatFloat(ffDecimal, 4) & "ns/loop" & " tSm1=" & $tSm1)
+
+  #proc t(name: string) =
+  #  for idx in 0..loopCount-1:
+  #    var delay = 0 # random(100..250)
+  #    echo "t" & name & " idx=" & $idx & " delay=" & $delay
+  #    var msg = ma.getMessage(idx, 0)
+  #    sleep(delay)
+  #    ma.retMessage(msg)
+
+  th("th1")
   sync()
 
-#t1()
+t1()
 #t2()
 t3()

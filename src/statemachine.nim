@@ -1,28 +1,24 @@
 type
-  Message* = object of RootObj
-    cmd*: int32
-
-  MessageRef* = ref Message
   MessagePtr* = ptr Message
+  Message* = object of RootObj
+    next*: MessagePtr
+    cmd*: int32
 
   State* = int
 
   StateMachine* = ref object of RootObj
     curState*: int
 
-proc `$`*(msg: MessageRef): string =
+proc `$`*(msg: MessagePtr): string =
   result = $msg.cmd
 
-proc `$`*(msg: MessagePtr): string =
-  $cast[MessageRef](msg)
-
 # processMsg needs to be dynamically dispatched thus its a method
-method processMsg*(sm: StateMachine, msg: MessageRef) =
+method processMsg*(sm: StateMachine, msg: MessagePtr) =
   echo "StateMachine.processMsg msg=", msg[]
 
 proc transitionTo*(sm: StateMachine, nextState: int) =
   sm.curState = nextState
 
-proc sendMsg*(sm: StateMachine, msg: MessageRef) =
+proc sendMsg*(sm: StateMachine, msg: MessagePtr) =
   sm.processMsg(msg)
 
