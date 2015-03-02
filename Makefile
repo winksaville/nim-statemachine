@@ -32,8 +32,8 @@ NIM_BIN_TEST_TARGET=$(TEST_DIR)/bin/test1
 #NIM_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE)
 NIM_FLAGS= $(FAST_DEFINE) $(REL_DEFINE)
 
-#NIM_TEST_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE)
-NIM_TEST_FLAGS=$(FAST_DEFINE) $(REL_DEFINE)
+NIM_TEST_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE)
+#NIM_TEST_FLAGS=$(FAST_DEFINE) $(REL_DEFINE)
 
 help:
 	@echo "Usage:"
@@ -51,24 +51,22 @@ help:
 
 build:
 	@mkdir -p $(SRC_DIR)/bin
-	nim c $(NIM_FLAGS) $(SRC_DIR)/tsq.nim
-	nim c $(NIM_FLAGS) $(SRC_DIR)/messagearena.nim
+	nim c $(NIM_FLAGS) $(SRC_DIR)/msgqueue.nim
+	nim c $(NIM_FLAGS) $(SRC_DIR)/msgarena.nim
 	nim c $(NIM_FLAGS) $(SRC_DIR)/statemachine.nim
 
 tests: clean-tests $(NIM_BIN_TEST_TARGET) run-tests
 
 unittests: clean-tests make-unittests run-unittests
-	@mkdir -p $(TEST_DIR)/bin
-	nim c $(NIM_TEST_FLAGS) $<
 
 make-unittests:
 	@mkdir -p $(TEST_DIR)/bin
 	nim c $(NIM_TEST_FLAGS) $(TEST_DIR)/statemachine_unittests.nim
-	nim c $(NIM_TEST_FLAGS) $(TEST_DIR)/tsq_unittests.nim
+	nim c $(NIM_TEST_FLAGS) $(TEST_DIR)/msgqueue_unittests.nim
 
 run-unittests:
 	$(TEST_DIR)/bin/statemachine_unittests
-	$(TEST_DIR)/bin/tsq_unittests
+	$(TEST_DIR)/bin/msgqueue_unittests
 
 # We need to makedir here because its not automatically created and linking fails
 $(NIM_BIN_TEST_TARGET): $(NIM_SRC_TEST_TARGET).nim Makefile

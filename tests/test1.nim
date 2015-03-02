@@ -1,5 +1,5 @@
 import times, parseopt2, os, strutils, threadpool, math
-import statemachine, messagearena
+import statemachine, msgarena, msgqueue
 
 when defined(fast):
   const fastest=true
@@ -16,7 +16,7 @@ type
     counter1: int
     counter2: int
 
-method processMsg(sm: TestSm, msg: MessageRef) =
+method processMsg(sm: TestSm, msg: MsgPtr) =
   case sm.curState
   of 1:
     sm.counter1 += 1
@@ -50,8 +50,8 @@ for kind, key, val in getopt():
 proc t1() =
   var testSm1 = TestSm(curState: 1)
 
-  var ma = newMessageArena()
-  var msg = MessageRef()
+  var ma = newMsgArena()
+  var msg = ma.getMsg(0, 0)
 
   var startTime = epochTime()
   var cmdVal = 1.int32
@@ -69,11 +69,11 @@ proc t1() =
       msg = MessageRef(cmd: cmdVal)
       testSm1.sendMsg(msg)
     else:
-      # Use MessageArena to speed things up
+      # Use MsgArena to speed things up
       # 37.5ns/loop desttop (no locks), 55.2ns/loop desttop (locks), 46.5ns/loop laptop (no locks)
-      msg = ma.getMessage(cmdVal, 0)
+      msg = ma.getMsg(cmdVal, 0)
       testSm1.sendMsg(msg)
-      ma.retMessage(msg)
+      ma.retMsg(msg)
 
   var
     endTime = epochTime()
@@ -118,26 +118,26 @@ proc delData(d: ptr Data) =
 proc t2() =
   echo "t2:+"
 
-  var ma = newMessageArena()
+  var ma = newMsgArena()
   echo "t2: ma=" & $ma
 
-  var msg1 = ma.getMessage(123, 0)
-  var msg2 = ma.getMessage(456, 0)
+  var msg1 = ma.getMsg(123, 0)
+  var msg2 = ma.getMsg(456, 0)
   echo "t2: msg1=" & $msg1
   echo "t2: msg2=" & $msg2
-  ma.retMessage(msg1)
+  ma.retMsg(msg1)
   echo "t2: retMessage ma=" & $ma
-  ma.retMessage(msg2)
+  ma.retMsg(msg2)
   echo "t2: retMessage ma=" & $ma
 
   # get one of the messages back
-  msg1 = ma.getMessage(789, 0)
+  msg1 = ma.getMsg(789, 0)
   echo "t2: msg1=" & $msg1
   echo "t2: retMessage ma=" & $ma
-  ma.retMessage(msg1)
+  ma.retMsg(msg1)
   echo "t2: retMessage ma=" & $ma
 
-  delMessageArena(ma)
+  delMsgArena(ma)
 
   var d2 = newData()
   d2.s = "def"
@@ -148,14 +148,16 @@ proc t2() =
 
 type
   TSm = ref object of StateMachine
+    done: bool
     counter1: int
     counter2: int
-    d: TSm
+    ma: MsgArenaPtr
+    mq: MsgQueuePtr
 
 proc `$`(sm: TSm): string =
   result = "(counter1x=" & $(sm.counter1) & " counter2x=" & $(sm.counter2) & ")"
 
-method processMsg(sm: TSm, msg: MessageRef) =
+method processMsg(sm: TSm, msg: MsgPtr) =
   case sm.curState
   of 1:
     sm.counter1 += 1
@@ -165,18 +167,17 @@ method processMsg(sm: TSm, msg: MessageRef) =
     sm.transitionTo(1)
   else:
     echo "TestSm default state"
-  if (sm.cmdVal <= loops):
-    mm = ma.getMessage(msg.cmdVal + 1, 0)
-    sm.d.sendMsg(mm)
-  ma.retMessage(msg)
+
+  if (msg.cmd <= loops):
+    var newMsg = sm.ma.getMsg(msg.cmd + 1, 0)
+    sm.mq.addTail(newMsg)
+  else:
+    sm.done = true
 
 proc t3() =
-  var tSm1 = TSm(curState: 1)
-  var tSm2 = TSm(curState: 1)
-  var ma = newMessageArena()
-
-  tSm1.d = tSm2;
-  tSm2.d = tSm1;
+  var ma = newMsgArena()
+  var tSm1 = TSm(curState: 1, ma: ma, mq: newMsgQueue())
+  var tSm2 = TSm(curState: 1, ma: ma, mq: newMsgQueue())
 
   echo "tSm1=" & $tSm1
 
@@ -185,14 +186,24 @@ proc t3() =
   randomize()
 
   proc th(name: string) =
-    var msg: MessageRef
+    var msg: MsgPtr
     var startTime = epochTime()
     var cmdVal = 0.int32
 
     echo "loops=" & $loops & " fastest=" & $fastest
     echo "cmdVal=" & $cmdVal
-    msg = ma.getMessage(cmdVal, 0)
+    msg = ma.getMsg(cmdVal, 0)
     tSm1.sendMsg(msg)
+
+    # Poll using this one thread
+    echo "Start polling"
+    while not tSm1.done or not tSm2.done:
+      msg = tSm1.mq.rmvHeadNonBlocking()
+      if msg != nil:
+        tSm1.sendMsg(msg)
+      msg = tSm2.mq.rmvHeadNonBlocking()
+      if msg != nil:
+        tSm2.sendMsg(msg)
 
     var
       endTime = epochTime()
@@ -204,7 +215,7 @@ proc t3() =
   #  for idx in 0..loopCount-1:
   #    var delay = 0 # random(100..250)
   #    echo "t" & name & " idx=" & $idx & " delay=" & $delay
-  #    var msg = ma.getMessage(idx, 0)
+  #    var msg = ma.getMsg(idx, 0)
   #    sleep(delay)
   #    ma.retMessage(msg)
 

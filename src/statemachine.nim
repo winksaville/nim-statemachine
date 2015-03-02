@@ -1,7 +1,7 @@
 type
-  MessagePtr* = ptr Message
-  Message* = object of RootObj
-    next*: MessagePtr
+  MsgPtr* = ptr Msg
+  Msg* = object of RootObj
+    next*: MsgPtr
     cmd*: int32
 
   State* = int
@@ -9,16 +9,16 @@ type
   StateMachine* = ref object of RootObj
     curState*: int
 
-proc `$`*(msg: MessagePtr): string =
-  result = $msg.cmd
+proc `$`*(msg: MsgPtr): string =
+  result = if msg == nil: "<nil>" else: $msg.cmd
 
 # processMsg needs to be dynamically dispatched thus its a method
-method processMsg*(sm: StateMachine, msg: MessagePtr) =
+method processMsg*(sm: StateMachine, msg: MsgPtr) =
   echo "StateMachine.processMsg msg=", msg[]
 
 proc transitionTo*(sm: StateMachine, nextState: int) =
   sm.curState = nextState
 
-proc sendMsg*(sm: StateMachine, msg: MessagePtr) =
+proc sendMsg*(sm: StateMachine, msg: MsgPtr) =
   sm.processMsg(msg)
 

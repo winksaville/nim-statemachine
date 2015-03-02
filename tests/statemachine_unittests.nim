@@ -1,4 +1,4 @@
-import unittest, statemachine, messagearena, times, parseopt2, os, strutils
+import unittest, statemachine, msgarena, times, parseopt2, os, strutils
 
 type
   TestSm = ref object of StateMachine
@@ -17,7 +17,7 @@ for kind, key, val in getopt():
     else: discard
   else: discard
 
-method processMsg(sm: TestSm, msg: MessagePtr) =
+method processMsg(sm: TestSm, msg: MsgPtr) =
   case sm.curState
   of 1:
     sm.counter1 += 1
@@ -32,9 +32,9 @@ suite "statemachine unittests":
   test "fast test":
     var
       testSm1 = TestSm(curState: 1)
-      ma = newMessageArena()
+      ma = newMsgArena()
       cmdVal = 1i32
-      msg = ma.getMessage(cmdVal, 0)
+      msg = ma.getMsg(cmdVal, 0)
       startTime = epochTime()
 
     for loop in 1..loops:
@@ -55,12 +55,12 @@ suite "statemachine unittests":
     var
       testSm1 = TestSm(curState: 1)
       cmdVal = 1i32
-      ma = newMessageArena()
+      ma = newMsgArena()
       startTime = epochTime()
 
     for loop in 1..loops:
       cmdVal += 1
-      testSm1.sendMsg(ma.getMessage(cmdVal, 0))
+      testSm1.sendMsg(ma.getMsg(cmdVal, 0))
 
     var
       endTime = epochTime()
