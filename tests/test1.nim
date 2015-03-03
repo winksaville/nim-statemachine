@@ -194,7 +194,7 @@ proc t3() =
 
   randomize()
 
-  proc th(name: string) =
+  proc twoStateMachinesOneThread(name: string) =
     var msg: MsgPtr
     var startTime = epochTime()
     var cmdVal = 0.int32
@@ -206,8 +206,7 @@ proc t3() =
 
     # Poll using this one thread
     echo "Start polling"
-    # while not tSm1.done or not tSm2.done:
-    for i in 1..8:
+    while not tSm1.done or not tSm2.done:
       echo "check tSm1"
       msg = tSm1.mq.rmvHeadNonBlocking()
       if msg != nil:
@@ -225,18 +224,7 @@ proc t3() =
 
     echo("time=" & time.formatFloat(ffDecimal, 4) & "ns/loop" & " tSm1=" & $tSm1)
 
-
-  #proc t(name: string) =
-  #  var loopCount = 10.int32
-  #  for idx in 0..loopCount-1:
-  #    var delay = 0 # random(100..250)
-  #    echo "t" & name & " idx=" & $idx & " delay=" & $delay
-  #    var msg = ma.getMsg(idx, 0)
-  #    sleep(delay)
-  #    ma.retMessage(msg)
-
-  th("th1")
-  sync()
+  twoStateMachinesOneThread("th1")
 
 #t1()
 #t2()
