@@ -149,15 +149,18 @@ proc t2() =
 type
   TSm = ref object of StateMachine
     done: bool
+    loops: int
     counter1: int
     counter2: int
-    ma: MsgArenaPtr
-    mq: MsgQueuePtr
+    ma: MsgArenaPtr # My message arena
+    mq: MsgQueuePtr # My receive queue
+    pq: MsgQueuePtr # Partner queue
 
 proc `$`(sm: TSm): string =
-  result = "(counter1x=" & $(sm.counter1) & " counter2x=" & $(sm.counter2) & ")"
+  result = "(" & $(sm.name) & ": done=" & $sm.done & " curState=" & $sm.curState & " counter1=" & $sm.counter1 & " counter2=" & $sm.counter2 & ")"
 
 method processMsg(sm: TSm, msg: MsgPtr) =
+  echo($sm)
   case sm.curState
   of 1:
     sm.counter1 += 1
@@ -168,20 +171,26 @@ method processMsg(sm: TSm, msg: MsgPtr) =
   else:
     echo "TestSm default state"
 
-  if (msg.cmd <= loops):
-    var newMsg = sm.ma.getMsg(msg.cmd + 1, 0)
-    sm.mq.addTail(newMsg)
-  else:
+  # Send message to partner
+  var newMsg = sm.ma.getMsg(msg.cmd + 1, 0)
+  echo sm.name & ": send message to partner"
+  sm.pq.addTail(newMsg)
+
+  if (msg.cmd > sm.loops):
+    echo sm.name & ": done"
     sm.done = true
 
 proc t3() =
   var ma = newMsgArena()
-  var tSm1 = TSm(curState: 1, ma: ma, mq: newMsgQueue())
-  var tSm2 = TSm(curState: 1, ma: ma, mq: newMsgQueue())
+  var tSm1 = TSm(name: "tSm1", loops: loops, curState: 1, ma: ma, mq: newMsgQueue())
+  var tSm2 = TSm(name: "tSm2", loops: loops, curState: 1, ma: ma, mq: newMsgQueue())
 
-  echo "tSm1=" & $tSm1
+  # Connect statemachines
+  tSm1.pq = tSm2.mq
+  tSm2.pq = tSm1.mq
 
-  var loopCount = 10.int32
+  echo($tSm1)
+  echo($tSm2)
 
   randomize()
 
@@ -197,12 +206,17 @@ proc t3() =
 
     # Poll using this one thread
     echo "Start polling"
-    while not tSm1.done or not tSm2.done:
+    # while not tSm1.done or not tSm2.done:
+    for i in 1..8:
+      echo "check tSm1"
       msg = tSm1.mq.rmvHeadNonBlocking()
       if msg != nil:
+        echo "send tSm1"
         tSm1.sendMsg(msg)
+      echo "check tSm2"
       msg = tSm2.mq.rmvHeadNonBlocking()
       if msg != nil:
+        echo "send tSm2"
         tSm2.sendMsg(msg)
 
     var
@@ -211,7 +225,9 @@ proc t3() =
 
     echo("time=" & time.formatFloat(ffDecimal, 4) & "ns/loop" & " tSm1=" & $tSm1)
 
+
   #proc t(name: string) =
+  #  var loopCount = 10.int32
   #  for idx in 0..loopCount-1:
   #    var delay = 0 # random(100..250)
   #    echo "t" & name & " idx=" & $idx & " delay=" & $delay
@@ -222,6 +238,6 @@ proc t3() =
   th("th1")
   sync()
 
-t1()
+#t1()
 #t2()
 t3()

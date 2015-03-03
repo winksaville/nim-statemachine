@@ -27,42 +27,41 @@ proc delMsgQueue*(mq: MsgQueuePtr) =
   deallocShared(mq)
 
 proc addTail*(mq: MsgQueuePtr, msg: MsgPtr) =
-  echo "addTail: msg=" & $msg
-  var msgPtr = msg
   mq.lock.acquire()
   block:
     if mq.head == nil:
-      mq.head = msgPtr
-      mq.tail = msgPtr
+      mq.head = msg
+      mq.tail = msg
       mq.cond.signal()
     else:
-      msgPtr.next = nil
-      mq.tail.next = msgPtr
-      mq.tail = msgPtr
+      msg.next = nil
+      mq.tail.next = msg
+      mq.tail = msg
   mq.lock.release()
 
+proc rmvHeadNolock(mq: MsgQueuePtr): MsgPtr =
+  result = mq.head
+  mq.head = result.next
+  result.next = nil
+  if mq.head == nil:
+    mq.tail = nil
+
 proc rmvHead*(mq: MsgQueuePtr): MsgPtr =
-  echo "rmvHead:"
   mq.lock.acquire()
   block:
     while mq.head == nil:
       echo("waiting")
       mq.cond.wait(mq.lock)
     echo("rmvHead: going")
-    result = mq.head
-    mq.head = result.next
-    result.next = nil
-    if mq.head == nil:
-      mq.tail = nil
+    result = mq.rmvHeadNolock()
   mq.lock.release()
 
 proc rmvHeadNonBlocking*(mq: MsgQueuePtr): MsgPtr =
-  echo "rmvHeadNonBlocking:"
   mq.lock.acquire()
   block:
     if mq.head == nil:
       result = nil
     else:
-      result = mq.rmvHead()
+      result = mq.rmvHeadNolock()
   mq.lock.release()
 

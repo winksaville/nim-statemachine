@@ -7,6 +7,7 @@ type
   State* = int
 
   StateMachine* = ref object of RootObj
+    name*: string
     curState*: int
 
 proc `$`*(msg: MsgPtr): string =
@@ -14,11 +15,10 @@ proc `$`*(msg: MsgPtr): string =
 
 # processMsg needs to be dynamically dispatched thus its a method
 method processMsg*(sm: StateMachine, msg: MsgPtr) =
-  echo "StateMachine.processMsg msg=", msg[]
+  echo "StateMachine.processMsg NOT Overidden Ignoring: msg=", $msg[]
 
 proc transitionTo*(sm: StateMachine, nextState: int) =
   sm.curState = nextState
 
 proc sendMsg*(sm: StateMachine, msg: MsgPtr) =
   sm.processMsg(msg)
-
