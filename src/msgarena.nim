@@ -27,18 +27,21 @@ proc getMsgArrayPtr(ma: MsgArenaPtr): ptr array[msgArenaSize, MsgPtr] =
 ## public procs
 
 proc `$`*(ma: MsgArenaPtr): string =
-  ma.lock.acquire()
-  block:
-    var msgStr = "{"
-    if ma.msgArray != nil:
-      for idx in 0..ma.msgCount-1:
-        # probably should do a sequence ??
-        msgStr &= $(cast[MsgPtr](ma.msgArray[idx]))
-        if idx < ma.msgCount-1:
-          msgStr &= ", "
-    msgStr &= "}"
-    result = "{" & $ma.msgCount & ", " & msgStr & "}"
-  ma.lock.release()
+  if ma == nil:
+    result = "<nil>"
+  else:
+    ma.lock.acquire()
+    block:
+      var msgStr = "{"
+      if ma.msgArray != nil:
+        for idx in 0..ma.msgCount-1:
+          # probably should do a sequence ??
+          msgStr &= $(cast[MsgPtr](ma.msgArray[idx]))
+          if idx < ma.msgCount-1:
+            msgStr &= ", "
+      msgStr &= "}"
+      result = "{" & $ma.msgCount & ", " & msgStr & "}"
+    ma.lock.release()
 
 proc newMsgArena*(): MsgArenaPtr =
   result = cast[MsgArenaPtr](allocShared0(sizeof(MsgArena)))

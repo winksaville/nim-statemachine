@@ -11,7 +11,7 @@ type
     curState*: int
 
 proc `$`*(msg: MsgPtr): string =
-  result = if msg == nil: "<nil>" else: $msg.cmd
+  result = if msg == nil: "<nil>" else: "{msg: cmd=" & $msg.cmd & "}"
 
 # processMsg needs to be dynamically dispatched thus its a method
 method processMsg*(sm: StateMachine, msg: MsgPtr) =

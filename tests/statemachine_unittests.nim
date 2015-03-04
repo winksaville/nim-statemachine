@@ -46,7 +46,7 @@ suite "statemachine unittests":
       endTime = epochTime()
       time = (((endTime - startTime) / float(loops))) * 1_000_000_000
 
-    echo("test1: time=" & time.formatFloat(ffDecimal, 4) & "ns/loop" & " testSm1=" & $testSm1[])
+    echo "fast test: time=" & time.formatFloat(ffDecimal, 4) & "ns/loop"
 
     check (testSm1.counter1 == (loops div 2 + loops mod 2))
     check (testSm1.counter2 == loops div 2)
@@ -66,7 +66,7 @@ suite "statemachine unittests":
       endTime = epochTime()
       time = (((endTime - startTime) / float(loops))) * 1_000_000_000
 
-    echo("test1: time=" & time.formatFloat(ffDecimal, 4) & "ns/loop" & " testSm1=" & $testSm1[])
+    echo "message each loop test: time=" & time.formatFloat(ffDecimal, 4) & "ns/loop"
 
     check (testSm1.counter1 == (loops div 2 + loops mod 2))
     check (testSm1.counter2 == loops div 2)

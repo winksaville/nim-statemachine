@@ -6,13 +6,39 @@ type
   MsgQueuePtr* = ptr MsgQueue
 
   MsgQueue* = object
+    name: string
+    ownsCondAndLock: bool
     cond: TCond
     lock: TLock
     head: MsgPtr
     tail: MsgPtr
 
-proc newMsgQueue*(): MsgQueuePtr =
+proc `$`*(mq: MsgQueuePtr): string =
+  result =
+    if mq == nil:
+      "<nil>"
+    else:
+      "{" & $mq.name & ":" &
+        " ownsCondAndLock=" & $mq.ownsCondAndLock &
+        " head=" & $mq.head &
+        " tail=" & $mq.tail &
+      "}"
+
+proc newMsgQueue*(name: string, cond: var TCond, lock: var TLock): MsgQueuePtr =
+  ## Create a new MsgQueue passing the initialized condition and lock
   var mq = cast[MsgQueuePtr](allocShared(sizeof(MsgQueue)))
+  mq.name = name
+  mq.ownsCondAndLock = false
+  mq.cond = cond;
+  mq.lock = lock;
+  mq.head = nil
+  mq.tail = nil
+  result = cast[MsgQueuePtr](mq)
+
+proc newMsgQueue*(name: string): MsgQueuePtr =
+  var mq = cast[MsgQueuePtr](allocShared(sizeof(MsgQueue)))
+  mq.name = name
+  mq.ownsCondAndLock = true
   mq.cond.initCond()
   mq.lock.initLock()
   mq.head = nil
@@ -22,37 +48,45 @@ proc newMsgQueue*(): MsgQueuePtr =
 proc delMsgQueue*(mq: MsgQueuePtr) =
   assert(mq.head == nil)
   assert(mq.tail == nil)
-  mq.cond.deinitCond()
-  mq.lock.deinitLock()
+  if mq.ownsCondAndLock:
+    mq.cond.deinitCond()
+    mq.lock.deinitLock()
+  GcUnref(mq.name)
   deallocShared(mq)
 
 proc addTail*(mq: MsgQueuePtr, msg: MsgPtr) =
+  echo($mq.name & ".addTail: msg=" & $msg)
   mq.lock.acquire()
   block:
     if mq.head == nil:
       mq.head = msg
       mq.tail = msg
+      echo($mq.name & ".addTail: add msg to empty and signal")
       mq.cond.signal()
     else:
       msg.next = nil
       mq.tail.next = msg
       mq.tail = msg
+      echo($mq.name & ".addTail: add msg to non-empty NO signal")
   mq.lock.release()
+  echo($mq.name & ".addTail: released")
 
 proc rmvHeadNolock(mq: MsgQueuePtr): MsgPtr =
+  echo($mq.name & ".rmvHeadNolock:+")
   result = mq.head
   mq.head = result.next
   result.next = nil
   if mq.head == nil:
     mq.tail = nil
+  echo($mq.name & ".rmvHeadNolock:-")
 
 proc rmvHead*(mq: MsgQueuePtr): MsgPtr =
   mq.lock.acquire()
   block:
     while mq.head == nil:
-      echo("waiting")
+      echo($mq.name & ".rmvHead: waiting")
       mq.cond.wait(mq.lock)
-    echo("rmvHead: going")
+    echo($mq.name & ".rmvHead: going")
     result = mq.rmvHeadNolock()
   mq.lock.release()
 

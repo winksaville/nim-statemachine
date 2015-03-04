@@ -157,7 +157,19 @@ type
     pq: MsgQueuePtr # Partner queue
 
 proc `$`(sm: TSm): string =
-  result = "(" & $(sm.name) & ": done=" & $sm.done & " curState=" & $sm.curState & " counter1=" & $sm.counter1 & " counter2=" & $sm.counter2 & ")"
+  result =
+    if sm == nil:
+      "<nil>"
+    else:
+      "{" &
+        $sm.name & ":" &
+        " done=" & $sm.done &
+        " curState=" & $sm.curState &
+        " counter1=" & $sm.counter1 &
+        " counter2=" & $sm.counter2 &
+        " mq=" & $sm.mq &
+        " pq=" & $sm.pq &
+      "}"
 
 method processMsg(sm: TSm, msg: MsgPtr) =
   echo($sm)
@@ -176,14 +188,17 @@ method processMsg(sm: TSm, msg: MsgPtr) =
   echo sm.name & ": send message to partner"
   sm.pq.addTail(newMsg)
 
+  # return the message after processing
+  sm.ma.retMsg(msg)
+
   if (msg.cmd > sm.loops):
     echo sm.name & ": done"
     sm.done = true
 
 proc t3() =
   var ma = newMsgArena()
-  var tSm1 = TSm(name: "tSm1", loops: loops, curState: 1, ma: ma, mq: newMsgQueue())
-  var tSm2 = TSm(name: "tSm2", loops: loops, curState: 1, ma: ma, mq: newMsgQueue())
+  var tSm1 = TSm(name: "tSm1", loops: loops, curState: 1, ma: ma, mq: newMsgQueue("tSm1"))
+  var tSm2 = TSm(name: "tSm2", loops: loops, curState: 1, ma: ma, mq: newMsgQueue("tSm2"))
 
   # Connect statemachines
   tSm1.pq = tSm2.mq
@@ -203,6 +218,7 @@ proc t3() =
     echo "cmdVal=" & $cmdVal
     msg = ma.getMsg(cmdVal, 0)
     tSm1.sendMsg(msg)
+    tSm1.ma.retMsg(msg)
 
     # Poll using this one thread
     echo "Start polling"
@@ -212,11 +228,13 @@ proc t3() =
       if msg != nil:
         echo "send tSm1"
         tSm1.sendMsg(msg)
+        tSm1.ma.retMsg(msg)
       echo "check tSm2"
       msg = tSm2.mq.rmvHeadNonBlocking()
       if msg != nil:
         echo "send tSm2"
         tSm2.sendMsg(msg)
+        tSm2.ma.retMsg(msg)
 
     var
       endTime = epochTime()
@@ -226,6 +244,39 @@ proc t3() =
 
   twoStateMachinesOneThread("th1")
 
+proc t4() =
+  proc looper(sm: TSm) =
+    echo "start: " & $sm
+    while not sm.done:
+      var msg = sm.mq.rmvHead()
+      sm.sendMsg(msg)
+      sm.ma.retMsg(msg)
+    echo "done: " & $sm
+
+  var
+    ma = newMsgArena()
+    sm1 = TSm(name: "looper1", loops: loops, curState: 1, ma: ma, mq: newMsgQueue("looper1"))
+    sm2 = TSm(name: "looper2", loops: loops, curState: 1, ma: ma, mq: newMsgQueue("looper2"))
+
+  sm1.pq = sm2.mq
+  sm2.pq = sm1.mq
+
+  echo "sm1: " & $sm1
+  echo "sm2: " & $sm2
+
+  spawn looper(sm1)
+  spawn looper(sm2)
+
+  # The first message
+  var msg = ma.getMsg(0, 0)
+  sm1.sendMsg(msg)
+  sm1.ma.retMsg(msg)
+
+  echo "waiting for the loopers to complete"
+  sync()
+  echo "loopers completed"
+
 #t1()
 #t2()
-t3()
+#t3()
+t4()
