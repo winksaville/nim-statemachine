@@ -24,8 +24,9 @@ proc `$`*(mq: MsgQueuePtr): string =
         " tail=" & $mq.tail &
       "}"
 
-proc newMsgQueue*(name: string, cond: var TCond, lock: var TLock): MsgQueuePtr =
+proc newMsgQueue*(name: string, cond: TCond, lock: TLock): MsgQueuePtr =
   ## Create a new MsgQueue passing the initialized condition and lock
+  echo "newMsqQueue:+ with cond/lock name=" & name
   var mq = cast[MsgQueuePtr](allocShared(sizeof(MsgQueue)))
   mq.name = name
   mq.ownsCondAndLock = false
@@ -34,6 +35,7 @@ proc newMsgQueue*(name: string, cond: var TCond, lock: var TLock): MsgQueuePtr =
   mq.head = nil
   mq.tail = nil
   result = cast[MsgQueuePtr](mq)
+  echo "newMsqQueue:- with cond/lock name=" & name
 
 proc newMsgQueue*(name: string): MsgQueuePtr =
   var mq = cast[MsgQueuePtr](allocShared(sizeof(MsgQueue)))

@@ -51,9 +51,10 @@ help:
 
 build:
 	@mkdir -p $(SRC_DIR)/bin
+	nim c $(NIM_FLAGS) $(SRC_DIR)/statemachine.nim
 	nim c $(NIM_FLAGS) $(SRC_DIR)/msgqueue.nim
 	nim c $(NIM_FLAGS) $(SRC_DIR)/msgarena.nim
-	nim c $(NIM_FLAGS) $(SRC_DIR)/statemachine.nim
+	nim c $(NIM_FLAGS) $(SRC_DIR)/msglooper.nim
 
 tests: clean-tests $(NIM_BIN_TEST_TARGET) run-tests
 

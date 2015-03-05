@@ -1,5 +1,5 @@
-import times, parseopt2, os, strutils, threadpool, math
-import statemachine, msgarena, msgqueue
+import times, parseopt2, os, strutils, threadpool, math, locks
+import statemachine, msgarena, msgqueue, msglooper
 
 when defined(fast):
   const fastest=true
@@ -276,7 +276,38 @@ proc t4() =
   sync()
   echo "loopers completed"
 
+proc t5() =
+  var
+    ma = newMsgArena()
+    ml1 = newMsgLooper("ml1")
+    #ml2 = newMsgLooper("ml2")
+
+    ml1mq = newMsgQueue("ml1mq", ml1.cond, ml1.lock)
+    ml2mq = newMsgQueue("ml2mq", ml1.cond, ml1.lock)
+    sm1 = TSm(name: "sm1", loops: loops, curState: 1, ma: ma, mq: ml1mq)
+    sm2 = TSm(name: "sm2", loops: loops, curState: 1, ma: ma, mq: ml2mq)
+
+  ml1.addMsgProcessor(sm1, ml1mq)
+  ml1.addMsgProcessor(sm2, ml2mq)
+
+  sm1.pq = sm2.mq
+  sm2.pq = sm1.mq
+
+  echo "sm1: " & $sm1
+  echo "sm2: " & $sm2
+
+  # The first message
+  var msg = ma.getMsg(0, 0)
+  sm1.sendMsg(msg)
+  sm1.ma.retMsg(msg)
+
+  echo "waiting for the loopers to complete"
+
+  sync()
+  echo "done"
+
 #t1()
 #t2()
 #t3()
-t4()
+#t4()
+t5()
