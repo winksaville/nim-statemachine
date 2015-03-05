@@ -21,7 +21,7 @@ type
     cond*: TCond
     lock*: TLock
     listMsgProcessorLen: int
-    listMsgProcessor: ptr array[0..listMsgProcessorMaxLen-1, MsgProcessor]
+    listMsgProcessor: ptr array[0..listMsgProcessorMaxLen-1, MsgProcessorPtr]
 
 # Global initialization lock and cond use to have newMsgLooper not return
 # until looper has startend and MsgLooper is completely initialized.
@@ -41,7 +41,7 @@ proc looper(ml: MsgLooperPtr) =
     echo "looper: ml.name=" & ml.name & " initializing"
     # initialize MsgLooper
     ml.listMsgProcessorLen = 0
-    ml.listMsgProcessor = cast[ptr array[0..listMsgProcessorMaxLen-1, MsgProcessor]](allocShared(sizeof(MsgProcessor) * listMsgProcessorMaxLen))
+    ml.listMsgProcessor = cast[ptr array[0..listMsgProcessorMaxLen-1, MsgProcessorPtr]](allocShared(sizeof(MsgProcessorPtr) * listMsgProcessorMaxLen))
     ml.lock.initLock()
     ml.cond.initCond()
     echo "looper: ml.name=" & ml.name & " signal gInitCond"
@@ -108,7 +108,7 @@ proc addMsgProcessor*(ml: MsgLooperPtr, sm: StateMachine, mq: MsgQueuePtr) =
   ml.lock.acquire()
   if ml.listMsgProcessorLen < listMsgProcessorMaxLen:
     echo "addMsgProcessor: ml.name=" & ml.name & "...."
-    var mp = cast[MsgProcessor](allocShared(sizeof(MsgProcessor)))
+    var mp = cast[MsgProcessorPtr](allocShared(sizeof(MsgProcessor)))
     mp.sm = sm
     mp.mq = mq
     ml.listMsgProcessor[ml.listMsgProcessorLen] = mp
