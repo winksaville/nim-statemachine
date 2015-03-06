@@ -280,15 +280,29 @@ proc t5() =
   var
     ma = newMsgArena()
     ml1 = newMsgLooper("ml1")
-    #ml2 = newMsgLooper("ml2")
+    ml2 = newMsgLooper("ml2")
+    mq1: MsgQueuePtr
+    mq2: MsgQueuePtr
+    sm1: TSm
+    sm2: TSm
 
-    ml1mq = newMsgQueue("ml1mq", ml1.cond, ml1.lock)
-    ml2mq = newMsgQueue("ml2mq", ml1.cond, ml1.lock)
-    sm1 = TSm(name: "sm1", loops: loops, curState: 1, ma: ma, mq: ml1mq)
-    sm2 = TSm(name: "sm2", loops: loops, curState: 1, ma: ma, mq: ml2mq)
+  if true:
+    # Have both message queues use two different loopers
+    mq1 = newMsgQueue("mq1-ml1", ml1.cond, ml1.lock)
+    mq2 = newMsgQueue("mq2-ml2", ml2.cond, ml2.lock)
+  else:
+    # Have both message queues use the same looper, ml1
+    # (Not always reliable, it sometimes hangs probably because
+    # because of spawn see: http://forum.nim-lang.org/t/959#5825.
+    # MsgLooper should be using createThread!)
+    mq1 = newMsgQueue("mq1-ml1", ml1.cond, ml1.lock)
+    mq2 = newMsgQueue("mq2-ml1", ml1.cond, ml1.lock)
 
-  ml1.addMsgProcessor(sm1, ml1mq)
-  ml1.addMsgProcessor(sm2, ml2mq)
+  sm1 = TSm(name: "sm1", loops: loops, curState: 1, ma: ma, mq: mq1)
+  sm2 = TSm(name: "sm2", loops: loops, curState: 1, ma: ma, mq: mq2)
+
+  ml1.addMsgProcessor(sm1, mq1)
+  ml1.addMsgProcessor(sm2, mq2)
 
   sm1.pq = sm2.mq
   sm2.pq = sm1.mq
@@ -301,8 +315,7 @@ proc t5() =
   sm1.sendMsg(msg)
   sm1.ma.retMsg(msg)
 
-  echo "waiting for the loopers to complete"
-
+  echo "Ctrl-C to STOP: As currently coded they never stop"
   sync()
   echo "done"
 
