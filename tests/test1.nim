@@ -297,30 +297,33 @@ proc t4() =
 proc t5() =
   var
     ma = newMsgArena()
-    ml1 = newMsgLooper("ml1")
-    ml2 = newMsgLooper("ml2")
     mq1: MsgQueuePtr
     mq2: MsgQueuePtr
     sm1: TSm
     sm2: TSm
 
-  if true:
+  if false:
     # Have both message queues use two different loopers
+    var
+      ml1 = newMsgLooper("ml1")
+      ml2 = newMsgLooper("ml2")
     mq1 = newMsgQueue("mq1-ml1", ml1.cond, ml1.lock)
     mq2 = newMsgQueue("mq2-ml2", ml2.cond, ml2.lock)
+    sm1 = newTSm("sm1", loops, ma, mq1, mq2)
+    sm2 = newTSm("sm2", loops, ma, mq2, mq1)
+    ml1.addMsgProcessor(sm1, mq1)
+    ml2.addMsgProcessor(sm2, mq2)
   else:
-    # Have both message queues use the same looper, ml1
-    # (Not always reliable, it sometimes hangs probably because
-    # because of spawn see: http://forum.nim-lang.org/t/959#5825.
-    # MsgLooper should be using createThread!)
+    # Have both message queues use the same looper
+    var
+      ml1 = newMsgLooper("ml1")
     mq1 = newMsgQueue("mq1-ml1", ml1.cond, ml1.lock)
     mq2 = newMsgQueue("mq2-ml1", ml1.cond, ml1.lock)
+    sm1 = newTSm("sm1", loops, ma, mq1, mq2)
+    sm2 = newTSm("sm2", loops, ma, mq2, mq1)
+    ml1.addMsgProcessor(sm1, mq1)
+    ml1.addMsgProcessor(sm2, mq2)
 
-  sm1 = newTSm("sm1", loops, ma, mq1, mq2)
-  sm2 = newTSm("sm2", loops, ma, mq2, mq1)
-
-  ml1.addMsgProcessor(sm1, mq1)
-  ml2.addMsgProcessor(sm2, mq2)
 
   # The first message
   echo "test1: send first message"
@@ -340,6 +343,7 @@ proc t5() =
     sm2.doneCond.wait(sm2.doneLock)
   sm2.doneLock.release()
 
+  # With two loopers 177us/loop and one looper 158us/loop on my Unix desktop
   var
     endTime = epochTime()
     messageCount = sm1.getMessageCount() + sm2.getMessageCount()
