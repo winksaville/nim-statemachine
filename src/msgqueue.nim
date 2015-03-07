@@ -2,14 +2,19 @@
 
 import statemachine, msgarena, locks
 
+when not defined(release):
+  const DBG = true
+else:
+  const DBG = false
+
 type
   MsgQueuePtr* = ptr MsgQueue
 
   MsgQueue* = object
     name: string
     ownsCondAndLock: bool
-    cond: TCond
-    lock: TLock
+    cond: ptr TCond
+    lock: ptr TLock
     head: MsgPtr
     tail: MsgPtr
 
@@ -24,10 +29,12 @@ proc `$`*(mq: MsgQueuePtr): string =
         " tail=" & $mq.tail &
       "}"
 
-proc newMsgQueue*(name: string, cond: TCond, lock: TLock): MsgQueuePtr =
+proc newMsgQueue*(name: string, cond: ptr TCond, lock: ptr TLock): MsgQueuePtr =
   ## Create a new MsgQueue passing the initialized condition and lock
-  echo "newMsqQueue:+ with cond/lock name=" & name
   var mq = cast[MsgQueuePtr](allocShared(sizeof(MsgQueue)))
+  proc dbg(s:string) =
+    when DBG: echo name & ".newMsgQueue(name,cond,lock):" & s
+  dbg "+"
   mq.name = name
   mq.ownsCondAndLock = false
   mq.cond = cond;
@@ -35,69 +42,98 @@ proc newMsgQueue*(name: string, cond: TCond, lock: TLock): MsgQueuePtr =
   mq.head = nil
   mq.tail = nil
   result = cast[MsgQueuePtr](mq)
-  echo "newMsqQueue:- with cond/lock name=" & name
+  dbg "-"
 
 proc newMsgQueue*(name: string): MsgQueuePtr =
   var mq = cast[MsgQueuePtr](allocShared(sizeof(MsgQueue)))
+  proc dbg(s:string) =
+    when DBG: echo name & ".newMsgQueue(name):" & s
+  dbg "+"
   mq.name = name
   mq.ownsCondAndLock = true
-  mq.cond.initCond()
-  mq.lock.initLock()
+  mq.cond = cast[ptr TCond](allocShared(sizeof(TCond)))
+  mq.cond[].initCond()
+  mq.lock = cast[ptr TLock](allocShared(sizeof(TLock)))
+  mq.lock[].initLock()
   mq.head = nil
   mq.tail = nil
   result = cast[MsgQueuePtr](mq)
+  dbg "-"
 
 proc delMsgQueue*(mq: MsgQueuePtr) =
+  proc dbg(s:string) =
+    when DBG: echo mq.name & ".delMsgQueue:" & s
+  dbg "+"
   assert(mq.head == nil)
   assert(mq.tail == nil)
   if mq.ownsCondAndLock:
-    mq.cond.deinitCond()
-    mq.lock.deinitLock()
+    mq.cond[].deinitCond()
+    freeShared(mq.cond)
+    mq.lock[].deinitLock()
+    freeShared(mq.lock)
   GcUnref(mq.name)
   deallocShared(mq)
+  dbg "-"
 
 proc addTail*(mq: MsgQueuePtr, msg: MsgPtr) =
-  echo($mq.name & ".addTail: msg=" & $msg)
-  mq.lock.acquire()
+  proc dbg(s:string) =
+    when DBG: echo mq.name & ".addTail:" & s
+  dbg "+ msg=" & $msg
+  mq.lock[].acquire()
+  dbg "got lock"
   block:
+    msg.next = nil
     if mq.head == nil:
       mq.head = msg
       mq.tail = msg
-      echo($mq.name & ".addTail: add msg to empty and signal")
-      mq.cond.signal()
+      dbg "add msg to empty and signal"
+      mq.cond[].signal()
     else:
-      msg.next = nil
       mq.tail.next = msg
       mq.tail = msg
-      echo($mq.name & ".addTail: add msg to non-empty NO signal")
-  mq.lock.release()
-  echo($mq.name & ".addTail: released")
+      dbg "add msg to non-empty NO signal"
+  dbg "releasing lock"
+  mq.lock[].release()
+  dbg "- msg=" & $msg
 
 proc rmvHeadNolock(mq: MsgQueuePtr): MsgPtr =
-  echo($mq.name & ".rmvHeadNolock:+")
+  proc dbg(s:string) =
+    when DBG: echo mq.name & ".rmvHeadNolock:" & s
+  dbg "+"
   result = mq.head
   mq.head = result.next
   result.next = nil
   if mq.head == nil:
     mq.tail = nil
-  echo($mq.name & ".rmvHeadNolock:-")
+  dbg "- msg=" & $result
 
 proc rmvHead*(mq: MsgQueuePtr): MsgPtr =
-  mq.lock.acquire()
+  proc dbg(s:string) =
+    when DBG: echo mq.name & ".rmvHead:" & s
+  dbg "+"
+  mq.lock[].acquire()
   block:
     while mq.head == nil:
-      echo($mq.name & ".rmvHead: waiting")
-      mq.cond.wait(mq.lock)
-    echo($mq.name & ".rmvHead: going")
+      dbg "waiting"
+      mq.cond[].wait(mq.lock[])
+    dbg "going"
     result = mq.rmvHeadNolock()
-  mq.lock.release()
+  mq.lock[].release()
+  dbg "- msg=" & $result
 
 proc rmvHeadNonBlocking*(mq: MsgQueuePtr): MsgPtr =
-  mq.lock.acquire()
+  proc dbg(s:string) =
+    when DBG: echo mq.name & ".rmvHeadNonBlocking:" & s
+  dbg "+"
+  mq.lock[].acquire()
   block:
     if mq.head == nil:
       result = nil
     else:
       result = mq.rmvHeadNolock()
-  mq.lock.release()
+  mq.lock[].release()
+  dbg "- msg=" & $result
 
+proc emptyNolock*(mq: MsgQueuePtr): bool =
+  ## Assume a lock is held outside
+  result = mq.head != nil

@@ -25,7 +25,7 @@ method processMsg(sm: TestSm, msg: MsgPtr) =
     sm.counter2 += 1
     sm.transitionTo(1)
   else:
-    echo "TestSm default state"
+    doAssert(false, "Invalid smCurState=" & $sm.curState)
 
 var
   loops: int
@@ -149,6 +149,8 @@ proc t2() =
 type
   TSm = ref object of StateMachine
     done: bool
+    doneLock: TLock
+    doneCond: TCond
     loops: int
     counter1: int
     counter2: int
@@ -164,6 +166,7 @@ proc `$`(sm: TSm): string =
       "{" &
         $sm.name & ":" &
         " done=" & $sm.done &
+        " loops=" & $sm.loops &
         " curState=" & $sm.curState &
         " counter1=" & $sm.counter1 &
         " counter2=" & $sm.counter2 &
@@ -171,8 +174,15 @@ proc `$`(sm: TSm): string =
         " pq=" & $sm.pq &
       "}"
 
+proc newTSm(name: string, loops: int, ma: MsgArenaPtr, mq: MsgQueuePtr, pq: MsgQueuePtr = nil): TSm =
+  result = TSm(name: name, loops: loops, curState: 1, ma: ma, mq: mq, pq: pq)
+  result.doneLock.initLock()
+  result.doneCond.initCond()
+
 method processMsg(sm: TSm, msg: MsgPtr) =
-  echo($sm)
+  when debug: echo sm.name & ".processMsg:+ msg.cmd=" & $msg.cmd & " sm=" & $sm
+  var cmd = msg.cmd
+
   case sm.curState
   of 1:
     sm.counter1 += 1
@@ -181,24 +191,28 @@ method processMsg(sm: TSm, msg: MsgPtr) =
     sm.counter2 += 1
     sm.transitionTo(1)
   else:
-    echo "TestSm default state"
+    echo sm.name & ".processMsg:default state"
 
   # Send message to partner
   var newMsg = sm.ma.getMsg(msg.cmd + 1, 0)
-  echo sm.name & ": send message to partner"
+  when debug: echo sm.name & ".processMsg:addTail newMsg to partner"
   sm.pq.addTail(newMsg)
 
   # return the message after processing
+  when debug: echo sm.name & ".processMsg:retMsg"
   sm.ma.retMsg(msg)
 
-  if (msg.cmd > sm.loops):
-    echo sm.name & ": done"
+  if (msg.cmd >= sm.loops):
     sm.done = true
+    sm.doneCond.signal()
+    echo sm.name & ": done"
+
+  when debug: echo sm.name & ".processMsg:- msg.cmd=" & $cmd & " sm=" & $sm
 
 proc t3() =
   var ma = newMsgArena()
-  var tSm1 = TSm(name: "tSm1", loops: loops, curState: 1, ma: ma, mq: newMsgQueue("tSm1"))
-  var tSm2 = TSm(name: "tSm2", loops: loops, curState: 1, ma: ma, mq: newMsgQueue("tSm2"))
+  var tSm1 = newTSm("tSm1", loops, ma, newMsgQueue("tSm1"))
+  var tSm2 = newTSm("tSm2", loops, ma, newMsgQueue("tSm2"))
 
   # Connect statemachines
   tSm1.pq = tSm2.mq
@@ -255,8 +269,8 @@ proc t4() =
 
   var
     ma = newMsgArena()
-    sm1 = TSm(name: "looper1", loops: loops, curState: 1, ma: ma, mq: newMsgQueue("looper1"))
-    sm2 = TSm(name: "looper2", loops: loops, curState: 1, ma: ma, mq: newMsgQueue("looper2"))
+    sm1 = newTSm("looper1", loops, ma, newMsgQueue("looper1"))
+    sm2 = newTSm("looper2", loops, ma, newMsgQueue("looper2"))
 
   sm1.pq = sm2.mq
   sm2.pq = sm1.mq
@@ -298,26 +312,35 @@ proc t5() =
     mq1 = newMsgQueue("mq1-ml1", ml1.cond, ml1.lock)
     mq2 = newMsgQueue("mq2-ml1", ml1.cond, ml1.lock)
 
-  sm1 = TSm(name: "sm1", loops: loops, curState: 1, ma: ma, mq: mq1)
-  sm2 = TSm(name: "sm2", loops: loops, curState: 1, ma: ma, mq: mq2)
+  sm1 = newTSm("sm1", loops, ma, mq1, mq2)
+  sm2 = newTSm("sm2", loops, ma, mq2, mq1)
 
   ml1.addMsgProcessor(sm1, mq1)
-  ml1.addMsgProcessor(sm2, mq2)
-
-  sm1.pq = sm2.mq
-  sm2.pq = sm1.mq
+  ml2.addMsgProcessor(sm2, mq2)
 
   echo "sm1: " & $sm1
   echo "sm2: " & $sm2
 
   # The first message
-  var msg = ma.getMsg(0, 0)
-  sm1.sendMsg(msg)
-  sm1.ma.retMsg(msg)
+  echo "test1: send first message"
+  var msg = ma.getMsg(1, 0)
+  sm1.mq.addTail(msg)
 
-  echo "Ctrl-C to STOP: As currently coded they never stop"
-  sync()
+  # Wait till the SM's are done
+  sm1.doneLock.acquire()
+  while not sm1.done:
+    sm1.doneCond.wait(sm1.doneLock)
+  sm1.doneLock.release()
+
+  sm2.doneLock.acquire()
+  while not sm2.done:
+    sm2.doneCond.wait(sm2.doneLock)
+  sm2.doneLock.release()
+
   echo "done"
+
+#proc t5() =
+#  echo "t5"
 
 #t1()
 #t2()

@@ -1,6 +1,11 @@
 import os, threadpool, locks
 import statemachine, msgqueue
 
+when not defined(release):
+  const DBG = true
+else:
+  const DBG = false
+
 const
   listMsgProcessorMaxLen = 10
 
@@ -18,10 +23,11 @@ type
     name: string
     initialized: bool
     done: bool
-    cond*: TCond
-    lock*: TLock
+    cond*: ptr TCond
+    lock*: ptr TLock
     listMsgProcessorLen: int
     listMsgProcessor: ptr array[0..listMsgProcessorMaxLen-1, MsgProcessorPtr]
+    thread: ptr TThread[MsgLooperPtr]
 
 # Global initialization lock and cond use to have newMsgLooper not return
 # until looper has startend and MsgLooper is completely initialized.
@@ -33,51 +39,77 @@ gInitLock.initLock()
 gInitCond.initCond()
 
 proc looper(ml: MsgLooperPtr) =
-  echo "looper:+ ml.name=" & ml.name
-  var processedAtLeastOneMsg = false
+  proc dbg(s: string) =
+    when DBG: echo ml.name & ".looper:" & s
+
+  dbg "+"
 
   gInitLock.acquire()
   block:
-    echo "looper: ml.name=" & ml.name & " initializing"
+    dbg "initializing"
     # initialize MsgLooper
     ml.listMsgProcessorLen = 0
     ml.listMsgProcessor = cast[ptr array[0..listMsgProcessorMaxLen-1, MsgProcessorPtr]](allocShared(sizeof(MsgProcessorPtr) * listMsgProcessorMaxLen))
-    ml.lock.initLock()
-    ml.cond.initCond()
-    echo "looper: ml.name=" & ml.name & " signal gInitCond"
+    ml.lock = cast[ptr TLock](allocShared(sizeof(TLock)))
+    ml.lock[].initLock()
+    ml.cond = cast[ptr TCond](allocShared(sizeof(TCond)))
+    ml.cond[].initCond()
+    dbg "signal gInitCond"
     ml.initialized = true;
     gInitCond.signal()
   gInitLock.release()
 
-  ml.lock.acquire()
   while not ml.done:
-    echo "looper: ml.name=" & ml.name & " TOL ml.listMsgProcessorLen=" & $ml.listMsgProcessorLen
+    dbg "TOL ml.listMsgProcessorLen=" & $ml.listMsgProcessorLen
+
+    # BUG: What happens when the list changes while we're iterating in these loops!
+
+    # First loop check if there are any messages to processes do not hold the lock
+    # because its recursive with mq.rmvHeadNonBlocking
+    var processedAtLeastOneMsg = false
     for idx in 0..ml.listMsgProcessorLen-1:
-      echo "looper: ml.name=" & ml.name & " idx=" & $idx
+      dbg "idx=" & $idx
       var mp = ml.listMsgProcessor[idx]
       var msg = mp.mq.rmvHeadNonBlocking()
-      echo "looper: ml.name=" & ml.name & " msg=" & $msg
+      dbg "msg=" & $msg
       if msg != nil:
-        echo "looper: ml.name=" & ml.name & " got msg=" & $msg
+        dbg "got msg=" & $msg
         processedAtLeastOneMsg = true
         mp.sm.sendMsg(msg)
-        # who is to return the msg to the arena?????
+        dbg "processed msg=" & $msg
 
     if (not ml.done) and (not processedAtLeastOneMsg):
-      # No messages were processesed so wait for one to arrive
-      echo "looper: ml.name=" & ml.name & " waiting"
-      ml.cond.wait(ml.lock)
-      echo "looper: ml.name=" & ml.name & " done-waiting"
-      processedAtLeastOneMsg = false
-    sleep(500)
-  ml.lock.release()
-  echo "looper:- ml.name=" & ml.name
+      # In this second loop we'll check if its empty and we'll hold
+      # the lock the entire time so we know for a fact that no signal
+      # could have been generated.
+      ml.lock[].acquire
+      var noMsgs = true
+      while (not ml.done) and noMsgs:
+        # Check if there are any messages to process
+        for idx in 0..ml.listMsgProcessorLen-1:
+          var mp = ml.listMsgProcessor[idx]
+          if mp.mq.emptyNolock():
+            dbg "idx=" & $idx & " got a message"
+            noMsgs = false
+            break;
+
+        if noMsgs:
+          # No messages to process so wait
+          dbg "waiting"
+          ml.cond[].wait(ml.lock[])
+          dbg "done-waiting"
+
+      ml.lock[].release
+  dbg ":-"
 
 
 proc newMsgLooper*(name: string): MsgLooperPtr =
+  proc dbg(s: string) =
+    when DBG: echo name & ".newMsgLooper:" & s
   ## newMsgLooper does not return until the looper has started and
   ## everything is fully initialized
-  echo "newMsgLooper:+ name=" & name
+
+  dbg "+"
 
   # Use a global to coordinate initialization of the looper
   # We may want to make a MsgLooper an untracked structure
@@ -87,35 +119,50 @@ proc newMsgLooper*(name: string): MsgLooperPtr =
     result = cast[MsgLooperPtr](allocShared(sizeof(MsgLooper)))
     result.name = name
     result.initialized = false;
-    spawn looper(result)
+
+    if true:
+      dbg "Using createThread"
+      result.thread = cast[ptr TThread[MsgLooperPtr]](allocShared(sizeof(TThread[MsgLooperPtr])))
+      createThread(result.thread[], looper, result)
+    else:
+      dbg "Using spwan"
+      spawn looper(result)
+
     while (not result.initialized):
-      echo "newMsgLooper: name=" & name & " waiting on gInitCond"
+      dbg "waiting on gInitCond"
       gInitCond.wait(gInitLock)
-    echo "newMsgLooper: name=" & name & " looper is initialized"
+    dbg "looper is initialized"
   gInitLock.release()
 
-  echo "newMsgLooper:- name=" & name
+  dbg "-"
 
 proc delMsgLooper*(ml: MsgLooperPtr) =
   ## kills the message looper, andd message processors
   ## associated witht he looper will not receive any further
   ## messages and all queued up message are lost.
   ## So use this with care!!
-  echo "delMsgLooper: empty"
+  proc dbg(s:string) =
+    when DBG: echo ml.name & ".delMsgLooper:" & s
+
+  dbg "DOES NOTHING YET"
   
 proc addMsgProcessor*(ml: MsgLooperPtr, sm: StateMachine, mq: MsgQueuePtr) =
-  echo "addMsgProcessor:+ ml.name=" & ml.name
-  ml.lock.acquire()
+  proc dbg(s:string) =
+    when DBG: echo ml.name & ".addMsgProcessor:" & s
+  dbg "+ sm=" & sm.name
+  ml.lock[].acquire()
+  dbg "acquired"
   if ml.listMsgProcessorLen < listMsgProcessorMaxLen:
-    echo "addMsgProcessor: ml.name=" & ml.name & "...."
+    dbg "...."
     var mp = cast[MsgProcessorPtr](allocShared(sizeof(MsgProcessor)))
     mp.sm = sm
     mp.mq = mq
     ml.listMsgProcessor[ml.listMsgProcessorLen] = mp
     ml.listMsgProcessorLen += 1
-    ml.cond.signal()
+    ml.cond[].signal()
   else:
-    doAssert(ml.listMsgProcessorLen < listMsgProcessorMaxLen)
-  ml.lock.release()
-  echo "addMsgProcessor:- ml.name=" & ml.name
+    doAssert(ml.listMsgProcessorLen >= listMsgProcessorMaxLen)
+
+  ml.lock[].release()
+  dbg "- sm=" & sm.name
 
