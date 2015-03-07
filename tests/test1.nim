@@ -73,7 +73,6 @@ proc t1() =
       # 37.5ns/loop desttop (no locks), 55.2ns/loop desttop (locks), 46.5ns/loop laptop (no locks)
       msg = ma.getMsg(cmdVal, 0)
       testSm1.sendMsg(msg)
-      ma.retMsg(msg)
 
   var
     endTime = epochTime()
@@ -154,6 +153,7 @@ type
     loops: int
     counter1: int
     counter2: int
+    counterOther: int
     ma: MsgArenaPtr # My message arena
     mq: MsgQueuePtr # My receive queue
     pq: MsgQueuePtr # Partner queue
@@ -170,6 +170,7 @@ proc `$`(sm: TSm): string =
         " curState=" & $sm.curState &
         " counter1=" & $sm.counter1 &
         " counter2=" & $sm.counter2 &
+        " counterOther=" & $sm.counterOther &
         " mq=" & $sm.mq &
         " pq=" & $sm.pq &
       "}"
@@ -179,9 +180,14 @@ proc newTSm(name: string, loops: int, ma: MsgArenaPtr, mq: MsgQueuePtr, pq: MsgQ
   result.doneLock.initLock()
   result.doneCond.initCond()
 
+method getMessageCount(sm: TSm): int64 =
+  result = sm.counter1 + sm.counter2
+
 method processMsg(sm: TSm, msg: MsgPtr) =
   when debug: echo sm.name & ".processMsg:+ msg.cmd=" & $msg.cmd & " sm=" & $sm
-  var cmd = msg.cmd
+
+  var
+    cmd = msg.cmd
 
   case sm.curState
   of 1:
@@ -191,21 +197,24 @@ method processMsg(sm: TSm, msg: MsgPtr) =
     sm.counter2 += 1
     sm.transitionTo(1)
   else:
+    sm.counterOther += 1
     echo sm.name & ".processMsg:default state"
 
-  # Send message to partner
-  var newMsg = sm.ma.getMsg(msg.cmd + 1, 0)
-  when debug: echo sm.name & ".processMsg:addTail newMsg to partner"
-  sm.pq.addTail(newMsg)
+  if not sm.done:
+    # Send message to partner
+    var newMsg = sm.ma.getMsg(msg.cmd + 1, 0)
+    when debug: echo sm.name & ".processMsg:addTail newMsg to partner"
+    sm.pq.addTail(newMsg)
 
   # return the message after processing
   when debug: echo sm.name & ".processMsg:retMsg"
   sm.ma.retMsg(msg)
 
-  if (msg.cmd >= sm.loops):
+  if (cmd >= sm.loops):
+    # We're done
     sm.done = true
     sm.doneCond.signal()
-    echo sm.name & ": done"
+    when debug: echo sm.name & ": done"
 
   when debug: echo sm.name & ".processMsg:- msg.cmd=" & $cmd & " sm=" & $sm
 
@@ -232,7 +241,6 @@ proc t3() =
     echo "cmdVal=" & $cmdVal
     msg = ma.getMsg(cmdVal, 0)
     tSm1.sendMsg(msg)
-    tSm1.ma.retMsg(msg)
 
     # Poll using this one thread
     echo "Start polling"
@@ -242,13 +250,11 @@ proc t3() =
       if msg != nil:
         echo "send tSm1"
         tSm1.sendMsg(msg)
-        tSm1.ma.retMsg(msg)
       echo "check tSm2"
       msg = tSm2.mq.rmvHeadNonBlocking()
       if msg != nil:
         echo "send tSm2"
         tSm2.sendMsg(msg)
-        tSm2.ma.retMsg(msg)
 
     var
       endTime = epochTime()
@@ -264,7 +270,6 @@ proc t4() =
     while not sm.done:
       var msg = sm.mq.rmvHead()
       sm.sendMsg(msg)
-      sm.ma.retMsg(msg)
     echo "done: " & $sm
 
   var
@@ -284,7 +289,6 @@ proc t4() =
   # The first message
   var msg = ma.getMsg(0, 0)
   sm1.sendMsg(msg)
-  sm1.ma.retMsg(msg)
 
   echo "waiting for the loopers to complete"
   sync()
@@ -318,12 +322,11 @@ proc t5() =
   ml1.addMsgProcessor(sm1, mq1)
   ml2.addMsgProcessor(sm2, mq2)
 
-  echo "sm1: " & $sm1
-  echo "sm2: " & $sm2
-
   # The first message
   echo "test1: send first message"
-  var msg = ma.getMsg(1, 0)
+  var
+    startTime = epochTime()
+    msg = ma.getMsg(1, 0)
   sm1.mq.addTail(msg)
 
   # Wait till the SM's are done
@@ -337,10 +340,14 @@ proc t5() =
     sm2.doneCond.wait(sm2.doneLock)
   sm2.doneLock.release()
 
-  echo "done"
+  var
+    endTime = epochTime()
+    messageCount = sm1.getMessageCount() + sm2.getMessageCount()
+    time = (((endTime - startTime) / float(messageCount))) * 1_000_000
 
-#proc t5() =
-#  echo "t5"
+  echo "t5 done: time=" & time.formatFloat(ffDecimal, 4) & "us/msg"
+  echo "  sm1: " & $sm1
+  echo "  sm2: " & $sm2
 
 #t1()
 #t2()
