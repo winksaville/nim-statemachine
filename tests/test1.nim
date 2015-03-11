@@ -1,3 +1,7 @@
+{.compile: "src/hw_tp.c".}
+{.compile: "src/hw_ptp.c".}
+proc ptp_hw_tp1(int_arg: int, string_arg: cstring) {.importc, header: "src/hw_ptp.h".}
+
 import times, parseopt2, os, strutils, threadpool, math, locks
 import statemachine, msgarena, msgqueue, msglooper
 
@@ -325,6 +329,8 @@ proc t5() =
     ml1.addMsgProcessor(sm2, mq2)
 
 
+  ptp_hw_tp1(1, "t5-start")
+
   # The first message
   echo "test1: send first message"
   var
@@ -342,6 +348,8 @@ proc t5() =
   while not sm2.done:
     sm2.doneCond.wait(sm2.doneLock)
   sm2.doneLock.release()
+
+  ptp_hw_tp1(2, "t5-done")
 
   # With two loopers 177us/loop and one looper 158us/loop on my Unix desktop
   var
