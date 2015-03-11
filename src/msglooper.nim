@@ -1,3 +1,8 @@
+const PTP = false
+
+when PTP:
+  proc ptp_hw_tp1(int_arg: int, string_arg: cstring) {.importc, header: "src/hw_ptp.h".}
+
 import os, threadpool, locks
 import statemachine, msgqueue
 
@@ -39,8 +44,12 @@ gInitLock.initLock()
 gInitCond.initCond()
 
 proc looper(ml: MsgLooperPtr) =
-  proc dbg(s: string) =
-    when DBG: echo ml.name & ".looper:" & s
+  let
+    prefix = ml.name & ".looper:"
+
+  proc dbg(s: string) {.inline.} =
+    when PTP: ptp_hw_tp1(0, prefix & s)
+    when DBG: echo prefix & s
 
   dbg "+"
 
@@ -59,48 +68,28 @@ proc looper(ml: MsgLooperPtr) =
     gInitCond.signal()
   gInitLock.release()
 
+  # BUG: What happens when the list changes while we're iterating in these loops!
+
+  ml.lock[].acquire
   while not ml.done:
     dbg "TOL ml.listMsgProcessorLen=" & $ml.listMsgProcessorLen
-
-    # BUG: What happens when the list changes while we're iterating in these loops!
-
-    # First loop check if there are any messages to processes do not hold the lock
-    # because its recursive with mq.rmvHeadNonBlocking
+    # Check if there are any messages to process
     var processedAtLeastOneMsg = false
     for idx in 0..ml.listMsgProcessorLen-1:
-      dbg "idx=" & $idx
       var mp = ml.listMsgProcessor[idx]
-      var msg = mp.mq.rmvHeadNonBlocking()
-      dbg "msg=" & $msg
+      var msg = mp.mq.rmvHeadNonBlockingNolock()
       if msg != nil:
-        dbg "got msg=" & $msg
         processedAtLeastOneMsg = true
         mp.sm.sendMsg(msg)
         dbg "processed msg=" & $msg
 
-    if (not ml.done) and (not processedAtLeastOneMsg):
-      # In this second loop we'll check if its empty and we'll hold
-      # the lock the entire time so we know for a fact that no signal
-      # could have been generated.
-      ml.lock[].acquire
-      var noMsgs = true
-      while (not ml.done) and noMsgs:
-        # Check if there are any messages to process
-        for idx in 0..ml.listMsgProcessorLen-1:
-          var mp = ml.listMsgProcessor[idx]
-          if mp.mq.emptyNolock():
-            dbg "idx=" & $idx & " got a message"
-            noMsgs = false
-            break;
-
-        if noMsgs:
-          # No messages to process so wait
-          dbg "waiting"
-          ml.cond[].wait(ml.lock[])
-          dbg "done-waiting"
-
-      ml.lock[].release
-  dbg ":-"
+    if not processedAtLeastOneMsg:
+      # No messages to process so wait
+      dbg "waiting"
+      ml.cond[].wait(ml.lock[])
+      dbg "done-waiting"
+  ml.lock[].release
+  dbg "-"
 
 
 proc newMsgLooper*(name: string): MsgLooperPtr =

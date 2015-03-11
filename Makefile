@@ -71,7 +71,13 @@ $(NIM_BIN_TEST_TARGET): $(NIM_SRC_TEST_TARGET).nim Makefile
 	gcc -o $@ $(TEST_DIR)/nimcache/*.o $(LIB_FLAGS)
 
 run-test: $(NIM_BIN_TEST_TARGET)
-	./$(NIM_BIN_TEST_TARGET) $(LOOPS)
+	lttng create sm-test
+	lttng enable-event -k sched_wakeup,sched_wakeup_new,sched_switch,sched_migrate_task,sched_wait_task,sched_process_wait,sched_process_fork,sched_process_exec
+	lttng enable-event -u hw:tp1
+	lttng start ; ./$(NIM_BIN_TEST_TARGET) $(LOOPS) ; lttng stop
+	lttng view > x.txt
+	grep hw:tp1 x.txt > y.txt
+	lttng destroy
 
 unittests: clean-tests make-unittests run-unittests
 

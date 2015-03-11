@@ -75,6 +75,32 @@ proc delMsgQueue*(mq: MsgQueuePtr) =
   deallocShared(mq)
   dbg "-"
 
+proc emptyNoLock*(mq: MsgQueuePtr): bool {.inline.} =
+  ## Assume a lock is held outside
+  result = mq.head == nil
+
+proc rmvHeadNolock(mq: MsgQueuePtr): MsgPtr =
+  proc dbg(s:string) =
+    when DBG: echo mq.name & ".rmvHeadNolock:" & s
+  dbg "+"
+  result = mq.head
+  mq.head = result.next
+  result.next = nil
+  if emptyNoLock(mq):
+    mq.tail = nil
+  dbg "- msg=" & $result
+
+proc rmvHeadNonBlockingNoLock*(mq: MsgQueuePtr): MsgPtr =
+  proc dbg(s:string) =
+    when DBG: echo mq.name & ".rmvHeadNonBlocking:" & s
+  dbg "+"
+  block:
+    if emptyNoLock(mq):
+      result = nil
+    else:
+      result = mq.rmvHeadNolock()
+  dbg "- msg=" & $result
+
 proc addTail*(mq: MsgQueuePtr, msg: MsgPtr) =
   proc dbg(s:string) =
     when DBG: echo mq.name & ".addTail:" & s
@@ -83,7 +109,7 @@ proc addTail*(mq: MsgQueuePtr, msg: MsgPtr) =
   dbg "got lock"
   block:
     msg.next = nil
-    if mq.head == nil:
+    if emptyNoLock(mq):
       mq.head = msg
       mq.tail = msg
       dbg "add msg to empty and signal"
@@ -96,24 +122,13 @@ proc addTail*(mq: MsgQueuePtr, msg: MsgPtr) =
   mq.lock[].release()
   dbg "- msg=" & $msg
 
-proc rmvHeadNolock(mq: MsgQueuePtr): MsgPtr =
-  proc dbg(s:string) =
-    when DBG: echo mq.name & ".rmvHeadNolock:" & s
-  dbg "+"
-  result = mq.head
-  mq.head = result.next
-  result.next = nil
-  if mq.head == nil:
-    mq.tail = nil
-  dbg "- msg=" & $result
-
 proc rmvHead*(mq: MsgQueuePtr): MsgPtr =
   proc dbg(s:string) =
     when DBG: echo mq.name & ".rmvHead:" & s
   dbg "+"
   mq.lock[].acquire()
   block:
-    while mq.head == nil:
+    while emptyNoLock(mq):
       dbg "waiting"
       mq.cond[].wait(mq.lock[])
     dbg "going"
@@ -122,18 +137,7 @@ proc rmvHead*(mq: MsgQueuePtr): MsgPtr =
   dbg "- msg=" & $result
 
 proc rmvHeadNonBlocking*(mq: MsgQueuePtr): MsgPtr =
-  proc dbg(s:string) =
-    when DBG: echo mq.name & ".rmvHeadNonBlocking:" & s
-  dbg "+"
   mq.lock[].acquire()
   block:
-    if mq.head == nil:
-      result = nil
-    else:
-      result = mq.rmvHeadNolock()
+    result = rmvHeadNonBlockingNoLock(mq)
   mq.lock[].release()
-  dbg "- msg=" & $result
-
-proc emptyNolock*(mq: MsgQueuePtr): bool =
-  ## Assume a lock is held outside
-  result = mq.head != nil

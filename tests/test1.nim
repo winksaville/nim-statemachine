@@ -1,6 +1,9 @@
-{.compile: "src/hw_tp.c".}
-{.compile: "src/hw_ptp.c".}
-proc ptp_hw_tp1(int_arg: int, string_arg: cstring) {.importc, header: "src/hw_ptp.h".}
+const PTP = true
+
+when PTP:
+  {.compile: "src/hw_tp.c".}
+  {.compile: "src/hw_ptp.c".}
+  proc ptp_hw_tp1(int_arg: int, string_arg: cstring) {.importc, header: "src/hw_ptp.h".}
 
 import times, parseopt2, os, strutils, threadpool, math, locks
 import statemachine, msgarena, msgqueue, msglooper
@@ -188,6 +191,7 @@ method getMessageCount(sm: TSm): int64 =
   result = sm.counter1 + sm.counter2
 
 method processMsg(sm: TSm, msg: MsgPtr) =
+  #ptp_hw_tp1(2, "t5-processMsg:+")
   when debug: echo sm.name & ".processMsg:+ msg.cmd=" & $msg.cmd & " sm=" & $sm
 
   var
@@ -217,10 +221,13 @@ method processMsg(sm: TSm, msg: MsgPtr) =
   if (cmd >= sm.loops):
     # We're done
     sm.done = true
+    when PTP: ptp_hw_tp1(2, "t5-processMsg: sm.doneCond.signal()")
     sm.doneCond.signal()
+    when PTP: ptp_hw_tp1(2, "t5-processMsg: done")
     when debug: echo sm.name & ": done"
 
   when debug: echo sm.name & ".processMsg:- msg.cmd=" & $cmd & " sm=" & $sm
+  #ptp_hw_tp1(2, "t5-processMsg:-")
 
 proc t3() =
   var ma = newMsgArena()
@@ -306,7 +313,7 @@ proc t5() =
     sm1: TSm
     sm2: TSm
 
-  if false:
+  if true:
     # Have both message queues use two different loopers
     var
       ml1 = newMsgLooper("ml1")
@@ -329,14 +336,16 @@ proc t5() =
     ml1.addMsgProcessor(sm2, mq2)
 
 
-  ptp_hw_tp1(1, "t5-start")
 
   # The first message
   echo "test1: send first message"
+  when PTP: ptp_hw_tp1(1, "t5-start")
   var
     startTime = epochTime()
     msg = ma.getMsg(1, 0)
+  when PTP: ptp_hw_tp1(1, "t5-adding")
   sm1.mq.addTail(msg)
+  when PTP: ptp_hw_tp1(1, "t5-added")
 
   # Wait till the SM's are done
   sm1.doneLock.acquire()
@@ -349,7 +358,7 @@ proc t5() =
     sm2.doneCond.wait(sm2.doneLock)
   sm2.doneLock.release()
 
-  ptp_hw_tp1(2, "t5-done")
+  when PTP: ptp_hw_tp1(2, "t5-done")
 
   # With two loopers 177us/loop and one looper 158us/loop on my Unix desktop
   var
