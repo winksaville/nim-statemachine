@@ -110,6 +110,8 @@ proc t5() =
     ml2.addMsgProcessor(sm2, mq2)
   else:
     # Have both message queues use the same looper
+    # BUG: This isn't working because msglooper.looper
+    # is holding the lock all the time.
     var
       ml1 = newMsgLooper("ml1")
     mq1 = newMsgQueue("mq1-ml1", ml1.cond, ml1.lock)
