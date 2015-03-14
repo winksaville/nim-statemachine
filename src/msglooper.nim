@@ -51,11 +51,11 @@ proc looper(ml: MsgLooperPtr) =
     when PTP: ptp_hw_tp1(0, prefix & s)
     when DBG: echo prefix & s
 
-  dbg "+"
+  when DBG: dbg "+"
 
   gInitLock.acquire()
   block:
-    dbg "initializing"
+    when DBG: dbg "initializing"
     # initialize MsgLooper
     ml.listMsgProcessorLen = 0
     ml.listMsgProcessor = cast[ptr array[0..listMsgProcessorMaxLen-1, MsgProcessorPtr]](allocShared(sizeof(MsgProcessorPtr) * listMsgProcessorMaxLen))
@@ -63,7 +63,7 @@ proc looper(ml: MsgLooperPtr) =
     ml.lock[].initLock()
     ml.cond = cast[ptr TCond](allocShared(sizeof(TCond)))
     ml.cond[].initCond()
-    dbg "signal gInitCond"
+    when DBG: dbg "signal gInitCond"
     ml.initialized = true;
     gInitCond.signal()
   gInitLock.release()
@@ -72,7 +72,7 @@ proc looper(ml: MsgLooperPtr) =
 
   ml.lock[].acquire
   while not ml.done:
-    dbg "TOL ml.listMsgProcessorLen=" & $ml.listMsgProcessorLen
+    when DBG: dbg "TOL ml.listMsgProcessorLen=" & $ml.listMsgProcessorLen
     # Check if there are any messages to process
     var processedAtLeastOneMsg = false
     for idx in 0..ml.listMsgProcessorLen-1:
@@ -81,24 +81,24 @@ proc looper(ml: MsgLooperPtr) =
       if msg != nil:
         processedAtLeastOneMsg = true
         mp.sm.sendMsg(msg)
-        dbg "processed msg=" & $msg
+        when DBG: dbg "processed msg=" & $msg
 
     if not processedAtLeastOneMsg:
       # No messages to process so wait
-      dbg "waiting"
+      when DBG: dbg "waiting"
       ml.cond[].wait(ml.lock[])
-      dbg "done-waiting"
+      when DBG: dbg "done-waiting"
   ml.lock[].release
-  dbg "-"
+  when DBG: dbg "-"
 
 
 proc newMsgLooper*(name: string): MsgLooperPtr =
   proc dbg(s: string) =
-    when DBG: echo name & ".newMsgLooper:" & s
+    echo name & ".newMsgLooper:" & s
   ## newMsgLooper does not return until the looper has started and
   ## everything is fully initialized
 
-  dbg "+"
+  when DBG: dbg "+"
 
   # Use a global to coordinate initialization of the looper
   # We may want to make a MsgLooper an untracked structure
@@ -110,20 +110,20 @@ proc newMsgLooper*(name: string): MsgLooperPtr =
     result.initialized = false;
 
     if true:
-      dbg "Using createThread"
+      when DBG: dbg "Using createThread"
       result.thread = cast[ptr TThread[MsgLooperPtr]](allocShared(sizeof(TThread[MsgLooperPtr])))
       createThread(result.thread[], looper, result)
     else:
-      dbg "Using spwan"
+      when DBG: dbg "Using spwan"
       spawn looper(result)
 
     while (not result.initialized):
-      dbg "waiting on gInitCond"
+      when DBG: dbg "waiting on gInitCond"
       gInitCond.wait(gInitLock)
-    dbg "looper is initialized"
+    when DBG: dbg "looper is initialized"
   gInitLock.release()
 
-  dbg "-"
+  when DBG: dbg "-"
 
 proc delMsgLooper*(ml: MsgLooperPtr) =
   ## kills the message looper, andd message processors
@@ -131,18 +131,18 @@ proc delMsgLooper*(ml: MsgLooperPtr) =
   ## messages and all queued up message are lost.
   ## So use this with care!!
   proc dbg(s:string) =
-    when DBG: echo ml.name & ".delMsgLooper:" & s
+    echo ml.name & ".delMsgLooper:" & s
 
-  dbg "DOES NOTHING YET"
+  when DBG: dbg "DOES NOTHING YET"
   
 proc addMsgProcessor*(ml: MsgLooperPtr, sm: StateMachine, mq: MsgQueuePtr) =
   proc dbg(s:string) =
-    when DBG: echo ml.name & ".addMsgProcessor:" & s
-  dbg "+ sm=" & sm.name
+    echo ml.name & ".addMsgProcessor:" & s
+  when DBG: dbg "+ sm=" & sm.name
   ml.lock[].acquire()
-  dbg "acquired"
+  when DBG: dbg "acquired"
   if ml.listMsgProcessorLen < listMsgProcessorMaxLen:
-    dbg "...."
+    when DBG: dbg "...."
     var mp = cast[MsgProcessorPtr](allocShared(sizeof(MsgProcessor)))
     mp.sm = sm
     mp.mq = mq
@@ -153,5 +153,5 @@ proc addMsgProcessor*(ml: MsgLooperPtr, sm: StateMachine, mq: MsgQueuePtr) =
     doAssert(ml.listMsgProcessorLen >= listMsgProcessorMaxLen)
 
   ml.lock[].release()
-  dbg "- sm=" & sm.name
+  when DBG: dbg "- sm=" & sm.name
 

@@ -143,7 +143,8 @@ proc t5() =
 
   when PTP: ptp_hw_tp1(2, "t5-done")
 
-  # With two loopers 177us/loop and one looper 158us/loop on my Unix desktop
+  # With two loopers we are now at 7.7-8.0us/loop, the big change was
+  # using when DBG: to remove the debug from msglooper.
   var
     endTime = epochTime()
     messageCount = sm1.getMessageCount() + sm2.getMessageCount()
