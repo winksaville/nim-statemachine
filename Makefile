@@ -44,6 +44,7 @@ help:
 	@echo "   test           -- clean build and run the test"
 	@echo "   build-test     -- build test"
 	@echo "   run-test       -- run test"
+	@echo "   run-lttng-test -- run test with lttng"
 	@echo "   make-unittests -- clean build and run the tests"
 	@echo "   unittests      -- clean build and run the tests"
 	@echo "   run-unittests  -- run statemachine no parameters"
@@ -53,16 +54,16 @@ help:
 	@echo "   rel={true|false} default false  -- release build"
 	@echo "   fast={true|false} default false -- fastest running"
 
-build:
+build: clean
 	@mkdir -p $(SRC_DIR)/bin
 	nim c $(NIM_FLAGS) $(SRC_DIR)/statemachine.nim
 	nim c $(NIM_FLAGS) $(SRC_DIR)/msgqueue.nim
 	nim c $(NIM_FLAGS) $(SRC_DIR)/msgarena.nim
 	nim c $(NIM_FLAGS) $(SRC_DIR)/msglooper.nim
 
-test: clean-tests build-test run-test
+test: build-test run-test
 
-build-test: $(NIM_BIN_TEST_TARGET)
+build-test: clean-tests $(NIM_BIN_TEST_TARGET)
 
 # We need to makedir here because its not automatically created and linking fails
 $(NIM_BIN_TEST_TARGET): $(NIM_SRC_TEST_TARGET).nim Makefile
@@ -71,6 +72,9 @@ $(NIM_BIN_TEST_TARGET): $(NIM_SRC_TEST_TARGET).nim Makefile
 	gcc -o $@ $(TEST_DIR)/nimcache/*.o $(LIB_FLAGS)
 
 run-test: $(NIM_BIN_TEST_TARGET)
+	./$(NIM_BIN_TEST_TARGET) $(LOOPS)
+
+run-test-lttng: $(NIM_BIN_TEST_TARGET)
 	lttng create sm-test
 	lttng enable-event -k sched_wakeup,sched_wakeup_new,sched_switch,sched_migrate_task,sched_wait_task,sched_process_wait,sched_process_fork,sched_process_exec
 	lttng enable-event -u hw:tp1

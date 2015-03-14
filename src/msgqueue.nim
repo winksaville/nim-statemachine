@@ -33,8 +33,8 @@ proc newMsgQueue*(name: string, cond: ptr TCond, lock: ptr TLock): MsgQueuePtr =
   ## Create a new MsgQueue passing the initialized condition and lock
   var mq = cast[MsgQueuePtr](allocShared(sizeof(MsgQueue)))
   proc dbg(s:string) =
-    when DBG: echo name & ".newMsgQueue(name,cond,lock):" & s
-  dbg "+"
+    echo name & ".newMsgQueue(name,cond,lock):" & s
+  when DBG: dbg "+"
   mq.name = name
   mq.ownsCondAndLock = false
   mq.cond = cond;
@@ -42,13 +42,13 @@ proc newMsgQueue*(name: string, cond: ptr TCond, lock: ptr TLock): MsgQueuePtr =
   mq.head = nil
   mq.tail = nil
   result = cast[MsgQueuePtr](mq)
-  dbg "-"
+  when DBG: dbg "-"
 
 proc newMsgQueue*(name: string): MsgQueuePtr =
   var mq = cast[MsgQueuePtr](allocShared(sizeof(MsgQueue)))
   proc dbg(s:string) =
-    when DBG: echo name & ".newMsgQueue(name):" & s
-  dbg "+"
+    echo name & ".newMsgQueue(name):" & s
+  when DBG: dbg "+"
   mq.name = name
   mq.ownsCondAndLock = true
   mq.cond = cast[ptr TCond](allocShared(sizeof(TCond)))
@@ -58,12 +58,12 @@ proc newMsgQueue*(name: string): MsgQueuePtr =
   mq.head = nil
   mq.tail = nil
   result = cast[MsgQueuePtr](mq)
-  dbg "-"
+  when DBG: dbg "-"
 
 proc delMsgQueue*(mq: MsgQueuePtr) =
   proc dbg(s:string) =
-    when DBG: echo mq.name & ".delMsgQueue:" & s
-  dbg "+"
+    echo mq.name & ".delMsgQueue:" & s
+  when DBG: dbg "+"
   assert(mq.head == nil)
   assert(mq.tail == nil)
   if mq.ownsCondAndLock:
@@ -73,68 +73,68 @@ proc delMsgQueue*(mq: MsgQueuePtr) =
     freeShared(mq.lock)
   GcUnref(mq.name)
   deallocShared(mq)
-  dbg "-"
+  when DBG: dbg "-"
 
 proc emptyNoLock*(mq: MsgQueuePtr): bool {.inline.} =
   ## Assume a lock is held outside
   result = mq.head == nil
 
-proc rmvHeadNolock(mq: MsgQueuePtr): MsgPtr =
+proc rmvHeadNoLock(mq: MsgQueuePtr): MsgPtr =
   proc dbg(s:string) =
-    when DBG: echo mq.name & ".rmvHeadNolock:" & s
-  dbg "+"
+    echo mq.name & ".rmvHeadNoLock:" & s
+  when DBG: dbg "+"
   result = mq.head
   mq.head = result.next
   result.next = nil
   if emptyNoLock(mq):
     mq.tail = nil
-  dbg "- msg=" & $result
+  when DBG: dbg "- msg=" & $result
 
 proc rmvHeadNonBlockingNoLock*(mq: MsgQueuePtr): MsgPtr =
   proc dbg(s:string) =
-    when DBG: echo mq.name & ".rmvHeadNonBlocking:" & s
-  dbg "+"
+    echo mq.name & ".rmvHeadNonBlocking:" & s
+  when DBG: dbg "+"
   block:
     if emptyNoLock(mq):
       result = nil
     else:
-      result = mq.rmvHeadNolock()
-  dbg "- msg=" & $result
+      result = mq.rmvHeadNoLock()
+  when DBG: dbg "- msg=" & $result
 
 proc addTail*(mq: MsgQueuePtr, msg: MsgPtr) =
   proc dbg(s:string) =
-    when DBG: echo mq.name & ".addTail:" & s
-  dbg "+ msg=" & $msg
+    echo mq.name & ".addTail:" & s
+  when DBG: dbg "+ msg=" & $msg
   mq.lock[].acquire()
-  dbg "got lock"
+  when DBG: dbg "got lock"
   block:
     msg.next = nil
     if emptyNoLock(mq):
       mq.head = msg
       mq.tail = msg
-      dbg "add msg to empty and signal"
+      when DBG: dbg "add msg to empty and signal"
       mq.cond[].signal()
     else:
       mq.tail.next = msg
       mq.tail = msg
-      dbg "add msg to non-empty NO signal"
-  dbg "releasing lock"
+      when DBG: dbg "add msg to non-empty NO signal"
+  when DBG: dbg "releasing lock"
   mq.lock[].release()
-  dbg "- msg=" & $msg
+  when DBG: dbg "- msg=" & $msg
 
 proc rmvHead*(mq: MsgQueuePtr): MsgPtr =
   proc dbg(s:string) =
-    when DBG: echo mq.name & ".rmvHead:" & s
-  dbg "+"
+    echo mq.name & ".rmvHead:" & s
+  when DBG: dbg "+"
   mq.lock[].acquire()
   block:
     while emptyNoLock(mq):
-      dbg "waiting"
+      when DBG: dbg "waiting"
       mq.cond[].wait(mq.lock[])
-    dbg "going"
-    result = mq.rmvHeadNolock()
+    when DBG: dbg "going"
+    result = mq.rmvHeadNoLock()
   mq.lock[].release()
-  dbg "- msg=" & $result
+  when DBG: dbg "- msg=" & $result
 
 proc rmvHeadNonBlocking*(mq: MsgQueuePtr): MsgPtr =
   mq.lock[].acquire()
