@@ -25,17 +25,16 @@ endif
 SRC_DIR=src
 TEST_DIR=tests
 
-LIB_FLAGS = -llttng-ust -ldl -lpthread
+LIB_FLAGS = -lpthread -ldl -llttng-ust
 
 NIM_SRC_TEST_TARGET=$(TEST_DIR)/test1
 NIM_BIN_TEST_TARGET=$(TEST_DIR)/bin/test1
 
-#NIM_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE)
-NIM_FLAGS= $(FAST_DEFINE) $(REL_DEFINE) --listCmd --noLinking
+NIM_FLAGS= $(FAST_DEFINE) $(REL_DEFINE)
+#NIM_FLAGS= -d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE)
 
-NIM_TEST_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE) --cincludes=. --listCmd --noLinking
-#NIM_TEST_FLAGS= $(FAST_DEFINE) $(REL_DEFINE) --cincludes=. --listCmd --noLinking
-#NIM_TEST_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE) --cincludes=. --listCmd --noLinking --parallelBuild:1
+NIM_TEST_FLAGS=$(FAST_DEFINE) $(REL_DEFINE) --cincludes=. --passL:-llttng-ust
+#NIM_TEST_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE) --cincludes=. --passL:-llttng-ust --parallelBuild:1
 
 help:
 	@echo "Usage:"
@@ -69,7 +68,6 @@ build-test: clean-tests $(NIM_BIN_TEST_TARGET)
 $(NIM_BIN_TEST_TARGET): $(NIM_SRC_TEST_TARGET).nim Makefile
 	@mkdir -p $(TEST_DIR)/bin
 	nim c $(NIM_TEST_FLAGS) $<
-	gcc -o $@ $(TEST_DIR)/nimcache/*.o $(LIB_FLAGS)
 
 run-test: $(NIM_BIN_TEST_TARGET)
 	./$(NIM_BIN_TEST_TARGET) $(LOOPS)
