@@ -86,7 +86,7 @@ method processMsg(sm: TSm, msg: MsgPtr) =
     when PTP: ptp_hw_tp1(2, "t5-processMsg: done")
     when debug: echo sm.name & ": done"
 
-  when debug: echo sm.name & ".processMsg:- msg.cmd=" & $cmd & " sm=" & $sm
+  when debug: echo sm.name & ".processMsg:- msg.cmd=" & $msg.cmd & " sm=" & $sm
   #ptp_hw_tp1(2, "t5-processMsg:-")
 
 proc t5() =
