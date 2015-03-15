@@ -1,9 +1,11 @@
-const PTP = false
 
-when PTP:
+when defined(PTP):
+  const PTP = true
   {.compile: "src/hw_tp.c".}
   {.compile: "src/hw_ptp.c".}
   proc ptp_hw_tp1(int_arg: int, string_arg: cstring) {.importc, header: "src/hw_ptp.h".}
+else:
+  const PTP = false
 
 import times, parseopt2, os, strutils, threadpool, math, locks
 import statemachine, msgarena, msgqueue, msglooper
@@ -145,8 +147,10 @@ proc t5() =
 
   when PTP: ptp_hw_tp1(2, "t5-done")
 
-  # With two loopers we are now at 7.7-8.0us/loop, the big change was
-  # using when DBG: to remove the debug from msglooper.
+  # With two loopers we are now at 3.0964us/loop on the mac and
+  # testTChannel is slightly faster at 3.0273us/loop. The times
+  # on mac are much more consistent. What's needed though is a
+  # more consistent benchmarking system.
   var
     endTime = epochTime()
     messageCount = sm1.getMessageCount() + sm2.getMessageCount()

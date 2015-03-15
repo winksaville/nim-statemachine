@@ -1,7 +1,8 @@
-const PTP = false
-
-when PTP:
+when defined(PTP):
+  const PTP = true
   proc ptp_hw_tp1(int_arg: int, string_arg: cstring) {.importc, header: "src/hw_ptp.h".}
+else:
+  const PTP = false
 
 import os, threadpool, locks
 import statemachine, msgqueue

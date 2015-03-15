@@ -1,9 +1,13 @@
 # make with no parameters or help prints usage
 # default to non-fast mode
-ifeq ($(fast),true)
-  FAST_DEFINE=-d:fast
+ifeq ($(ptp),true)
+  $(warning ptp==true)
+  PTP_DEFINE=-d:PTP
+  LTTNG_COMP_FLAGS=--passL:-llttng-ust
 else
-  FAST_DEFINE=--symbol:fast
+  $(warning ptp==false)
+  PTP_DEFINE=--symbol:PTP
+  LTTNG_COMP_FLAGS=
 endif
 
 # default to release build
@@ -25,16 +29,14 @@ endif
 SRC_DIR=src
 TEST_DIR=tests
 
-LIB_FLAGS = -lpthread -ldl -llttng-ust
-
 NIM_SRC_TEST_TARGET=$(TEST_DIR)/test1
 NIM_BIN_TEST_TARGET=$(TEST_DIR)/bin/test1
 
-NIM_FLAGS= $(FAST_DEFINE) $(REL_DEFINE)
-#NIM_FLAGS= -d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE)
+NIM_FLAGS= $(FAST_DEFINE) $(REL_DEFINE) $(PTP_DEFINE) $(LTTNG_COMP_FLAGS) --cincludes=.
+#NIM_FLAGS= -d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE) $(PTP_DEFINE) $(LTTNG_COMP_FLAGS) --cincludes=.
 
-NIM_TEST_FLAGS=$(FAST_DEFINE) $(REL_DEFINE) --cincludes=. --passL:-llttng-ust
-#NIM_TEST_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE) --cincludes=. --passL:-llttng-ust --parallelBuild:1
+NIM_TEST_FLAGS=$(FAST_DEFINE) $(REL_DEFINE) $(PTP_DEFINE) $(LTTNG_COMP_FLAGS) --cincludes=.
+#NIM_TEST_FLAGS=-d:useSysAssert -d:useGcAssert $(FAST_DEFINE) $(REL_DEFINE) $(PTP_DEFINE) $(LTTNG_COMP_FLAGS) --cincludes=.
 
 help:
 	@echo "Usage:"
